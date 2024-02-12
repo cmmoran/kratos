@@ -57,7 +57,12 @@ func NewGetIdentityCmd() *cobra.Command {
 			// we check includeCreds argument is valid
 			for _, opt := range includeCreds {
 				e := stringsx.SwitchExact(opt)
-				if !e.AddCase("oidc") {
+				if !e.AddCase("oidc") &&
+					!e.AddCase("password") &&
+					!e.AddCase("totp") &&
+					!e.AddCase("lookup_secret") &&
+					!e.AddCase("webauthn") &&
+					!e.AddCase("code") {
 					cmd.PrintErrln(`You have to put a valid value of credentials type to be included, try --help for details.`)
 					return cmdx.FailSilently(cmd)
 				}
