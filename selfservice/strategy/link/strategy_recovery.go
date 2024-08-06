@@ -56,7 +56,7 @@ func (s *Strategy) PopulateRecoveryMethod(r *http.Request, f *recovery.Flow) err
 		// v0.5: form.Field{Name: "email", Type: "email", Required: true},
 		node.NewInputField("email", nil, node.LinkGroup, node.InputAttributeTypeEmail, node.WithRequiredInputAttribute).WithMetaLabel(text.NewInfoNodeInputEmail()),
 	)
-	f.UI.GetNodes().Append(node.NewInputField("method", s.RecoveryStrategyID(), node.LinkGroup, node.InputAttributeTypeSubmit).WithMetaLabel(text.NewInfoNodeLabelSubmit()))
+	f.UI.GetNodes().Append(node.NewInputField("method", s.RecoveryStrategyID(), node.LinkGroup, node.InputAttributeTypeSubmit).WithMetaLabel(text.NewInfoNodeLabelContinue()))
 
 	return nil
 }
@@ -283,9 +283,8 @@ func (s *Strategy) Recover(w http.ResponseWriter, r *http.Request, f *recovery.F
 	}
 
 	switch req.State {
-	case flow.StateChooseMethod:
-		fallthrough
-	case flow.StateEmailSent:
+	case flow.StateChooseMethod,
+		flow.StateEmailSent:
 		return s.recoveryHandleFormSubmission(w, r, req)
 	case flow.StatePassedChallenge:
 		// was already handled, do not allow retry

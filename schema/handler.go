@@ -13,25 +13,21 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ory/x/otelx"
-
-	"github.com/ory/x/pagination/migrationpagination"
-
-	"github.com/ory/kratos/driver/config"
-
 	"github.com/julienschmidt/httprouter"
 	"github.com/pkg/errors"
 
 	"github.com/ory/herodot"
-
+	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/x"
+	"github.com/ory/x/otelx"
+	"github.com/ory/x/pagination/migrationpagination"
 )
 
 type (
 	handlerDependencies interface {
 		x.WriterProvider
 		x.LoggingProvider
-		IdentityTraitsProvider
+		IdentitySchemaProvider
 		x.CSRFProvider
 		config.Provider
 		x.TracingProvider

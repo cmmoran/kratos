@@ -101,7 +101,7 @@ func TestHandleError(t *testing.T) {
 		defer res.Body.Close()
 		require.Contains(t, res.Request.URL.String(), conf.SelfServiceFlowErrorURL(ctx).String()+"?id=")
 
-		sse, _, err := sdk.FrontendApi.GetFlowError(context.Background()).
+		sse, _, err := sdk.FrontendAPI.GetFlowError(context.Background()).
 			Id(res.Request.URL.Query().Get("id")).Execute()
 		require.NoError(t, err)
 
@@ -153,7 +153,7 @@ func TestHandleError(t *testing.T) {
 				// This needs an authenticated client in order to call the RouteGetFlow endpoint
 				s, err := session.NewActiveSession(req, &id, testhelpers.NewSessionLifespanProvider(time.Hour), time.Now(), identity.CredentialsTypePassword, identity.AuthenticatorAssuranceLevel1)
 				require.NoError(t, err)
-				c := testhelpers.NewHTTPClientWithSessionToken(t, reg, s)
+				c := testhelpers.NewHTTPClientWithSessionToken(t, ctx, reg, s)
 
 				settingsFlow = newFlow(t, time.Minute, tc.t)
 				flowError = flow.NewFlowExpiredError(expiredAnHourAgo)

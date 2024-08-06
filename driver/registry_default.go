@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ory/kratos/selfservice/strategy/idfirst"
+
 	"github.com/cenkalti/backoff"
 	"github.com/dgraph-io/ristretto"
 	"github.com/gobuffalo/pop/v6"
@@ -93,9 +95,10 @@ type RegistryDefault struct {
 	hookCodeAddressVerifier *hook.CodeAddressVerifier
 	hookTwoStepRegistration *hook.TwoStepRegistration
 
-	identityHandler   *identity.Handler
-	identityValidator *identity.Validator
-	identityManager   *identity.Manager
+	identityHandler        *identity.Handler
+	identityValidator      *identity.Validator
+	identityManager        *identity.Manager
+	identitySchemaProvider schema.IdentitySchemaProvider
 
 	courierHandler *courier.Handler
 
@@ -323,6 +326,7 @@ func (m *RegistryDefault) selfServiceStrategies() []any {
 				passkey.NewStrategy(m),
 				webauthn.NewStrategy(m),
 				lookup.NewStrategy(m),
+				idfirst.NewStrategy(m),
 			}
 		}
 	}
@@ -378,6 +382,7 @@ nextStrategy:
 					continue nextStrategy
 				}
 			}
+
 			if m.strategyLoginEnabled(ctx, s.ID().String()) {
 				loginStrategies = append(loginStrategies, s)
 			}
@@ -621,6 +626,7 @@ func (m *RegistryDefault) Init(ctx context.Context, ctxer contextx.Contextualize
 			instrumentedsql.WithOmitArgs(), // don't risk leaking PII or secrets
 		}
 	}
+
 	if o.replaceTracer != nil {
 		m.trc = o.replaceTracer(m.trc)
 	}
@@ -631,6 +637,10 @@ func (m *RegistryDefault) Init(ctx context.Context, ctxer contextx.Contextualize
 
 	if o.extraHooks != nil {
 		m.WithHooks(o.extraHooks)
+	}
+
+	if o.replaceIdentitySchemaProvider != nil {
+		m.identitySchemaProvider = o.replaceIdentitySchemaProvider(m)
 	}
 
 	bc := backoff.NewExponentialBackOff()

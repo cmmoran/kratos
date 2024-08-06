@@ -14,6 +14,7 @@ selfservice:
       after:
         code:
           hooks:
+            - hook: show_verification_ui
             - hook: session
 
     login:
@@ -37,7 +38,6 @@ selfservice:
       enabled: true
     code:
       passwordless_enabled: true
-      passwordless_login_fallback_enabled: false
       enabled: true
       config:
         lifespan: 1h

@@ -145,6 +145,7 @@ func TestRegistration(t *testing.T) {
 				testhelpers.SnapshotTExcept(t, f.Ui.Nodes, []string{
 					"2.attributes.value",
 					"5.attributes.onclick",
+					"5.attributes.value",
 					"6.attributes.nonce",
 					"6.attributes.src",
 				})
@@ -367,6 +368,13 @@ func TestRegistration(t *testing.T) {
 					i, _, err := reg.PrivilegedIdentityPool().FindByCredentialsIdentifier(context.Background(), identity.CredentialsTypeWebAuthn, email)
 					require.NoError(t, err)
 					assert.Equal(t, email, gjson.GetBytes(i.Traits, "username").String(), "%s", actual)
+
+					if f == "spa" {
+						assert.EqualValues(t, flow.ContinueWithActionRedirectBrowserToString, gjson.Get(actual, "continue_with.0.action").String(), "%s", actual)
+						assert.Contains(t, gjson.Get(actual, "continue_with.0.redirect_browser_to").String(), redirNoSessionTS.URL+"/registration-return-ts", "%s", actual)
+					} else {
+						assert.Empty(t, gjson.Get(actual, "continue_with").Array(), "%s", actual)
+					}
 				})
 			}
 		})
@@ -438,7 +446,7 @@ func TestRegistration(t *testing.T) {
 					actual, _, _ = makeRegistration(t, f, values(email))
 					assert.Contains(t, gjson.Get(actual, "ui.action").String(), publicTS.URL+registration.RouteSubmitFlow, "%s", actual)
 					registrationhelpers.CheckFormContent(t, []byte(actual), node.WebAuthnRegisterTrigger, "csrf_token", "traits.username")
-					assert.Equal(t, "You tried signing in with "+email+" which is already in use by another account. You can sign in using your password.", gjson.Get(actual, "ui.messages.0.text").String(), "%s", actual)
+					assert.Equal(t, "You tried signing in with "+email+" which is already in use by another account. You can sign in using your passkey or a security key.", gjson.Get(actual, "ui.messages.0.text").String(), "%s", actual)
 				})
 			}
 		})

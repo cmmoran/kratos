@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"golang.org/x/exp/maps"
 
@@ -23,7 +24,6 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/ory/kratos/cipher"
-	"github.com/ory/kratos/selfservice/flowhelpers"
 	"github.com/ory/kratos/selfservice/sessiontokenexchange"
 	"github.com/ory/x/jsonnetsecure"
 	"github.com/ory/x/otelx"
@@ -118,9 +118,9 @@ type Dependencies interface {
 
 func isForced(req interface{}) bool {
 	f, ok := req.(interface {
-		IsForced() bool
+		IsRefresh() bool
 	})
-	return ok && f.IsForced()
+	return ok && f.IsRefresh()
 }
 
 // Strategy implements selfservice.LoginStrategy, selfservice.RegistrationStrategy and selfservice.SettingsStrategy.
@@ -316,7 +316,10 @@ func (s *Strategy) ValidateCallback(w http.ResponseWriter, r *http.Request) (flo
 
 	cntnr := AuthCodeContainer{}
 	if f.GetType() == flow.TypeBrowser || !hasSessionTokenCode {
-		if _, err := s.d.ContinuityManager().Continue(r.Context(), w, r, sessionName, continuity.WithPayload(&cntnr)); err != nil {
+		if _, err := s.d.ContinuityManager().Continue(r.Context(), w, r, sessionName,
+			continuity.WithPayload(&cntnr),
+			continuity.WithExpireInsteadOfDelete(time.Minute),
+		); err != nil {
 			return nil, nil, err
 		}
 		if stateParam != cntnr.State {
@@ -334,6 +337,7 @@ func (s *Strategy) ValidateCallback(w http.ResponseWriter, r *http.Request) (flo
 	if errorParam != "" {
 		return f, &cntnr, errors.WithStack(herodot.ErrBadRequest.WithReasonf(`Unable to complete OpenID Connect flow because the OpenID Provider returned error "%s": %s`, r.URL.Query().Get("error"), r.URL.Query().Get("error_description")))
 	}
+
 	if codeParam == "" {
 		return f, &cntnr, errors.WithStack(herodot.ErrBadRequest.WithReasonf(`Unable to complete OpenID Connect flow because the OpenID Provider did not return the code query parameter.`))
 	}
@@ -370,7 +374,7 @@ func (s *Strategy) alreadyAuthenticated(w http.ResponseWriter, r *http.Request, 
 			returnTo := s.d.Config().SelfServiceBrowserDefaultReturnTo(ctx)
 			if redirecter, ok := f.(flow.FlowWithRedirect); ok {
 				r, err := x.SecureRedirectTo(r, returnTo, redirecter.SecureRedirectToOpts(ctx, s.d)...)
-				if err != nil {
+				if err == nil {
 					returnTo = r
 				}
 			}
@@ -462,6 +466,9 @@ func (s *Strategy) HandleCallback(w http.ResponseWriter, r *http.Request, ps htt
 	case *login.Flow:
 		a.TransientPayload = cntnr.TransientPayload
 		if ff, err := s.processLogin(w, r, a, et, claims, provider, cntnr); err != nil {
+			if errors.Is(err, flow.ErrCompletedByStrategy) {
+				return
+			}
 			if ff != nil {
 				s.forwardError(w, r, ff, err)
 				return
@@ -529,38 +536,8 @@ func (s *Strategy) populateMethod(r *http.Request, f flow.Flow, message func(pro
 		return err
 	}
 
-	providers := conf.Providers
-
-	if lf, ok := f.(*login.Flow); ok && lf.IsForced() {
-		if _, id, c := flowhelpers.GuessForcedLoginIdentifier(r, s.d, lf, s.ID()); id != nil {
-			if c == nil {
-				// no OIDC credentials, don't add any providers
-				providers = nil
-			} else {
-				var credentials identity.CredentialsOIDC
-				if err := json.Unmarshal(c.Config, &credentials); err != nil {
-					// failed to read OIDC credentials, don't add any providers
-					providers = nil
-				} else {
-					// add only providers that can actually be used to log in as this identity
-					providers = make([]Configuration, 0, len(conf.Providers))
-					for i := range conf.Providers {
-						for j := range credentials.Providers {
-							if conf.Providers[i].ID == credentials.Providers[j].Provider {
-								providers = append(providers, conf.Providers[i])
-								break
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	// does not need sorting because there is only one field
-	c := f.GetUI()
-	c.SetCSRF(s.d.GenerateCSRFToken(r))
-	AddProviders(c, providers, message)
+	f.GetUI().SetCSRF(s.d.GenerateCSRFToken(r))
+	AddProviders(f.GetUI(), conf.Providers, message)
 
 	return nil
 }
@@ -631,7 +608,19 @@ func (s *Strategy) handleError(w http.ResponseWriter, r *http.Request, f flow.Fl
 				return err
 			}
 			// return a new login flow with the error message embedded in the login flow.
-			redirectURL := lf.AppendTo(s.d.Config().SelfServiceFlowLoginUI(r.Context()))
+			var redirectURL *url.URL
+			if lf.Type == flow.TypeAPI {
+				returnTo := s.d.Config().SelfServiceBrowserDefaultReturnTo(r.Context())
+				if redirecter, ok := f.(flow.FlowWithRedirect); ok {
+					secureReturnTo, err := x.SecureRedirectTo(r, returnTo, redirecter.SecureRedirectToOpts(r.Context(), s.d)...)
+					if err == nil {
+						returnTo = secureReturnTo
+					}
+				}
+				redirectURL = lf.AppendTo(returnTo)
+			} else {
+				redirectURL = lf.AppendTo(s.d.Config().SelfServiceFlowLoginUI(r.Context()))
+			}
 			if dc, err := flow.DuplicateCredentials(lf); err == nil && dc != nil {
 				redirectURL = urlx.CopyWithQuery(redirectURL, url.Values{"no_org_ui": {"true"}})
 
@@ -653,6 +642,9 @@ func (s *Strategy) handleError(w http.ResponseWriter, r *http.Request, f flow.Fl
 				provider, _ := s.provider(r.Context(), r, providerID)
 				if provider != nil && provider.Config() != nil {
 					providerLabel = provider.Config().Label
+					if providerLabel == "" {
+						providerLabel = provider.Config().Provider
+					}
 				}
 				lf.UI.Messages.Add(text.NewInfoLoginLinkMessage(dc.DuplicateIdentifier, providerLabel, newLoginURL))
 

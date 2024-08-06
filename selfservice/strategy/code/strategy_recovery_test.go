@@ -532,7 +532,7 @@ func TestRecovery(t *testing.T) {
 				require.NoError(t, err)
 
 				// Add the authentication to the request
-				client.Transport = testhelpers.NewTransportWithLogger(testhelpers.NewAuthorizedTransport(t, reg, session), t).RoundTripper
+				client.Transport = testhelpers.NewTransportWithLogger(testhelpers.NewAuthorizedTransport(t, ctx, reg, session), t).RoundTripper
 
 				v := testhelpers.SDKFormFieldsToURLValues(f.Ui.Nodes)
 				v.Set("email", "some-email@example.org")
@@ -724,7 +724,7 @@ func TestRecovery(t *testing.T) {
 
 				rs, res, err := testhelpers.
 					NewSDKCustomClient(public, c).
-					FrontendApi.GetRecoveryFlow(context.Background()).
+					FrontendAPI.GetRecoveryFlow(context.Background()).
 					Id(flowId).
 					Execute()
 
@@ -1373,7 +1373,7 @@ func TestRecovery_WithContinueWith(t *testing.T) {
 				require.NoError(t, err)
 
 				// Add the authentication to the request
-				client.Transport = testhelpers.NewTransportWithLogger(testhelpers.NewAuthorizedTransport(t, reg, session), t).RoundTripper
+				client.Transport = testhelpers.NewTransportWithLogger(testhelpers.NewAuthorizedTransport(t, ctx, reg, session), t).RoundTripper
 
 				v := testhelpers.SDKFormFieldsToURLValues(f.Ui.Nodes)
 				v.Set("email", "some-email@example.org")
@@ -1571,7 +1571,7 @@ func TestRecovery_WithContinueWith(t *testing.T) {
 
 				rs, res, err := testhelpers.
 					NewSDKCustomClient(public, c).
-					FrontendApi.GetRecoveryFlow(context.Background()).
+					FrontendAPI.GetRecoveryFlow(context.Background()).
 					Id(flowId).
 					Execute()
 
@@ -1972,7 +1972,7 @@ func TestDisabledStrategy(t *testing.T) {
 			require.NoError(t, reg.IdentityManager().Create(context.Background(),
 				&id, identity.ManagerAllowWriteProtectedTraits))
 
-			rl, _, err := adminSDK.IdentityApi.
+			rl, _, err := adminSDK.IdentityAPI.
 				CreateRecoveryLinkForIdentity(context.Background()).
 				CreateRecoveryLinkForIdentityBody(kratos.CreateRecoveryLinkForIdentityBody{IdentityId: id.ID.String()}).
 				Execute()

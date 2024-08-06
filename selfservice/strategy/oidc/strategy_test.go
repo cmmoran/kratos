@@ -18,6 +18,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
+	"github.com/samber/lo"
+
 	"github.com/ory/kratos/selfservice/hook/hooktest"
 	"github.com/ory/x/sqlxx"
 
@@ -184,7 +187,7 @@ func TestStrategy(t *testing.T) {
 		return res, body
 	}
 
-	makeAPICodeFlowRequest := func(t *testing.T, provider, action string) (returnToCode string) {
+	makeAPICodeFlowRequest := func(t *testing.T, provider, action string) (returnToURL *url.URL) {
 		res, err := testhelpers.NewDebugClient(t).Post(action, "application/json", strings.NewReader(fmt.Sprintf(`{
 	"method": "oidc",
 	"provider": %q
@@ -197,13 +200,10 @@ func TestStrategy(t *testing.T) {
 		res, err = testhelpers.NewClientWithCookieJar(t, nil, true).Get(changeLocation.RedirectBrowserTo)
 		require.NoError(t, err)
 
-		returnToURL := res.Request.URL
+		returnToURL = res.Request.URL
 		assert.True(t, strings.HasPrefix(returnToURL.String(), returnTS.URL+"/app_code"))
 
-		code := returnToURL.Query().Get("code")
-		assert.NotEmpty(t, code, "code query param was empty in the return_to URL")
-
-		return code
+		return returnToURL
 	}
 
 	exchangeCodeForToken := func(t *testing.T, codes sessiontokenexchange.Codes) (codeResponse session.CodeExchangeResponse, err error) {
@@ -498,6 +498,105 @@ func TestStrategy(t *testing.T) {
 
 			postLoginWebhook.AssertTransientPayload(t, transientPayload)
 		})
+
+		t.Run("case=should pass double submit", func(t *testing.T) {
+			// This test checks that the continuity manager uses a grace period to handle potential double-submit issues.
+			//
+			// It addresses issues where Facebook and Apple consent screens on mobile behave in a way that makes it
+			// easy for users to experience double-submit issues.
+			j, err := cookiejar.New(nil)
+			require.NoError(t, err)
+
+			makeInitialRequest := func(t *testing.T, provider, action string, fv url.Values) (*http.Response, []byte, []string) {
+				fv.Set("provider", provider)
+
+				var lastVia []*http.Request
+				hc := &http.Client{
+					Jar: j,
+					CheckRedirect: func(req *http.Request, via []*http.Request) error {
+						lastVia = via
+						return nil
+					},
+				}
+				res, err := hc.PostForm(action, fv)
+				require.NoError(t, err, action)
+
+				body, err := io.ReadAll(res.Body)
+				require.NoError(t, res.Body.Close())
+				require.NoError(t, err)
+				require.NotEmpty(t, lastVia)
+
+				vias := make([]string, len(lastVia))
+				for k, v := range lastVia {
+					vias[k] = v.URL.String()
+				}
+
+				return res, body, vias
+			}
+
+			r := newBrowserLoginFlow(t, returnTS.URL, time.Minute)
+			action := assertFormValues(t, r.ID, "valid")
+
+			// First login
+			res, body, via := makeInitialRequest(t, "valid", action, url.Values{})
+			assertIdentity(t, res, body)
+			expectTokens(t, "valid", body)
+			assert.Equal(t, "valid", gjson.GetBytes(body, "authentication_methods.0.provider").String(), "%s", body)
+
+			// We fetch the URL which includes the `?code` query parameter.
+			result := lo.Filter(via, func(s string, _ int) bool {
+				return strings.Contains(s, "code=")
+			})
+			require.Len(t, result, 1)
+
+			// And call that URL again. What's interesting here is that the whole requets passes because we are already authenticated.
+			//
+			// In this scenario, Ory Kratos correctly forwards the user to the return URL, which in our case returns the identity.
+			//
+			// We essentially run into this bit:
+			//
+			// 	if authenticated, err := s.alreadyAuthenticated(w, r, req); err != nil {
+			//		s.forwardError(w, r, req, s.handleError(w, r, req, pid, nil, err))
+			//	} else if authenticated {
+			//		return <-- we end up here on the second call
+			//	}
+			res, err = (&http.Client{Jar: j}).Get(result[0])
+			require.NoError(t, err)
+			body, err = io.ReadAll(res.Body)
+			require.NoError(t, err)
+			require.NoError(t, res.Body.Close())
+
+			assertIdentity(t, res, body)
+			expectTokens(t, "valid", body)
+			assert.Equal(t, "valid", gjson.GetBytes(body, "authentication_methods.0.provider").String(), "%s", body)
+
+			// Trying this flow again without the Ory Session cookie will fail as we run into code reuse:
+			cookies := j.Cookies(urlx.ParseOrPanic(ts.URL))
+			t.Logf("Cookies: %s", spew.Sdump(cookies))
+
+			secondJar, err := cookiejar.New(nil)
+			require.NoError(t, err)
+
+			secondJar.SetCookies(urlx.ParseOrPanic(ts.URL), lo.Filter(cookies, func(item *http.Cookie, index int) bool {
+				return item.Name != "ory_kratos_session"
+			}))
+
+			cookies = secondJar.Cookies(urlx.ParseOrPanic(ts.URL))
+			t.Logf("Cookies after: %s", spew.Sdump(cookies))
+
+			// Doing the request but this time without the Ory Session Cookie. This may be the case in scenarios where we run into race conditions
+			// where the server sent a response but the client did not process it.
+			res, err = (&http.Client{Jar: secondJar}).Get(result[0])
+			require.NoError(t, err)
+			body, err = io.ReadAll(res.Body)
+			require.NoError(t, err)
+			require.NoError(t, res.Body.Close())
+
+			// The reason for `invalid_client` here is that the code was already used and the session was already authenticated. The invalid_client
+			// happens because of the way Golang's OAuth2 library is trying out different auth methods when a token request fails, which obfuscates
+			// the underlying error.
+			assert.Contains(t, string(body), "invalid_client", "%s", body)
+		})
 	})
 
 	t.Run("case=login without registered account", func(t *testing.T) {
@@ -553,12 +652,15 @@ func TestStrategy(t *testing.T) {
 	t.Run("suite=API with session token exchange code", func(t *testing.T) {
 		scope = []string{"openid"}
 
-		loginOrRegister := func(t *testing.T, id uuid.UUID, code string) {
+		loginOrRegister := func(t *testing.T, flowID uuid.UUID, code string) {
 			_, err := exchangeCodeForToken(t, sessiontokenexchange.Codes{InitCode: code})
 			require.Error(t, err)
 
-			action := assertFormValues(t, id, "valid")
-			returnToCode := makeAPICodeFlowRequest(t, "valid", action)
+			action := assertFormValues(t, flowID, "valid")
+			returnToURL := makeAPICodeFlowRequest(t, "valid", action)
+			returnToCode := returnToURL.Query().Get("code")
+			assert.NotEmpty(t, code, "code query param was empty in the return_to URL")
+
 			codeResponse, err := exchangeCodeForToken(t, sessiontokenexchange.Codes{
 				InitCode:     code,
 				ReturnToCode: returnToCode,
@@ -568,11 +670,11 @@ func TestStrategy(t *testing.T) {
 			assert.NotEmpty(t, codeResponse.Token)
 			assert.Equal(t, subject, gjson.GetBytes(codeResponse.Session.Identity.Traits, "subject").String())
 		}
-		register := func(t *testing.T) {
+		performRegistration := func(t *testing.T) {
 			f := newAPIRegistrationFlow(t, returnTS.URL+"?return_session_token_exchange_code=true&return_to=/app_code", 1*time.Minute)
 			loginOrRegister(t, f.ID, f.SessionTokenExchangeCode)
 		}
-		login := func(t *testing.T) {
+		performLogin := func(t *testing.T) {
 			f := newAPILoginFlow(t, returnTS.URL+"?return_session_token_exchange_code=true&return_to=/app_code", 1*time.Minute)
 			loginOrRegister(t, f.ID, f.SessionTokenExchangeCode)
 		}
@@ -582,16 +684,16 @@ func TestStrategy(t *testing.T) {
 			first, then func(*testing.T)
 		}{{
 			name:  "login-twice",
-			first: login, then: login,
+			first: performLogin, then: performLogin,
 		}, {
 			name:  "login-then-register",
-			first: login, then: register,
+			first: performLogin, then: performRegistration,
 		}, {
 			name:  "register-then-login",
-			first: register, then: login,
+			first: performRegistration, then: performLogin,
 		}, {
 			name:  "register-twice",
-			first: register, then: register,
+			first: performRegistration, then: performRegistration,
 		}} {
 			t.Run("case="+tc.name, func(t *testing.T) {
 				subject = tc.name + "-api-code-testing@ory.sh"
@@ -599,6 +701,31 @@ func TestStrategy(t *testing.T) {
 				tc.then(t)
 			})
 		}
+		t.Run("case=should use redirect_to URL on failure", func(t *testing.T) {
+			ctx := context.Background()
+			subject = "existing-subject-api-code-testing@ory.sh"
+
+			i := identity.NewIdentity(config.DefaultIdentityTraitsSchemaID)
+			i.SetCredentials(identity.CredentialsTypePassword, identity.Credentials{
+				Identifiers: []string{subject},
+			})
+			i.Traits = identity.Traits(`{"subject":"` + subject + `"}`)
+			require.NoError(t, reg.PrivilegedIdentityPool().CreateIdentity(ctx, i))
+
+			f := newAPILoginFlow(t, returnTS.URL+"?return_session_token_exchange_code=true&return_to=/app_code", 1*time.Minute)
+
+			_, err := exchangeCodeForToken(t, sessiontokenexchange.Codes{InitCode: f.SessionTokenExchangeCode})
+			require.Error(t, err)
+
+			action := assertFormValues(t, f.ID, "valid")
+			returnToURL := makeAPICodeFlowRequest(t, "valid", action)
+			returnedFlow := returnToURL.Query().Get("flow")
+
+			require.NotEmpty(t, returnedFlow, "flow query param was empty in the return_to URL")
+			loginFlow, err := reg.LoginFlowPersister().GetLoginFlow(ctx, uuid.FromStringOrNil(returnedFlow))
+			require.NoError(t, err)
+			assert.Equal(t, text.ErrorValidationDuplicateCredentials, loginFlow.UI.Messages[0].ID)
+		})
 	})
 
 	t.Run("case=submit id_token during registration or login", func(t *testing.T) {
@@ -1288,16 +1415,6 @@ func TestStrategy(t *testing.T) {
 
 		snapshotx.SnapshotTExcept(t, sr.UI, []string{"action", "nodes.0.attributes.value"})
 	})
-
-	t.Run("method=TestPopulateLoginMethod", func(t *testing.T) {
-		conf.MustSet(ctx, config.ViperKeyPublicBaseURL, "https://foo/")
-
-		sr, err := login.NewFlow(conf, time.Minute, "nosurf", &http.Request{URL: urlx.ParseOrPanic("/")}, flow.TypeBrowser)
-		require.NoError(t, err)
-		require.NoError(t, reg.LoginStrategies(context.Background()).MustStrategy(identity.CredentialsTypeOIDC).(*oidc.Strategy).PopulateLoginMethod(&http.Request{}, identity.AuthenticatorAssuranceLevel1, sr))
-
-		snapshotx.SnapshotTExcept(t, sr.UI, []string{"action", "nodes.0.attributes.value"})
-	})
 }
 
 func prettyJSON(t *testing.T, body []byte) string {
@@ -1406,7 +1523,7 @@ func TestCountActiveFirstFactorCredentials(t *testing.T) {
 func TestDisabledEndpoint(t *testing.T) {
 	conf, reg := internal.NewFastRegistryWithMocks(t)
 	testhelpers.StrategyEnable(t, conf, identity.CredentialsTypeOIDC.String(), false)
-
+	ctx := context.Background()
 	publicTS, _ := testhelpers.NewKratosServer(t, reg)
 
 	t.Run("case=should not callback when oidc method is disabled", func(t *testing.T) {
@@ -1424,7 +1541,7 @@ func TestDisabledEndpoint(t *testing.T) {
 
 		t.Run("flow=settings", func(t *testing.T) {
 			testhelpers.SetDefaultIdentitySchema(conf, "file://stub/stub.schema.json")
-			c := testhelpers.NewHTTPClientWithArbitrarySessionCookie(t, reg)
+			c := testhelpers.NewHTTPClientWithArbitrarySessionCookie(t, ctx, reg)
 			f := testhelpers.InitializeSettingsFlowViaAPI(t, c, publicTS)
 
 			res, err := c.PostForm(f.Ui.Action, url.Values{"link": {"oidc"}})
