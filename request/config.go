@@ -6,6 +6,7 @@ package request
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/tidwall/gjson"
 )
@@ -42,8 +43,15 @@ func (c *Config) UnmarshalJSON(raw []byte) error {
 		a.Header.Set("Content-Type", ContentTypeJSON)
 	}
 
+	r := strings.NewReplacer("[[", "{{", "]]", "}}")
 	for key, value := range rawHeader {
-		a.Header.Set(key, value.String())
+		if len(value.String()) > 0 {
+			v := value.String()
+			v = r.Replace(v)
+			a.Header.Set(key, v)
+		} else {
+			a.Header.Set(key, value.String())
+		}
 	}
 
 	*c = Config(a)

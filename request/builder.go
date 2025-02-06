@@ -7,6 +7,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/Masterminds/sprig/v3"
+	"html/template"
 	"io"
 	"net/http"
 	"net/url"
@@ -198,7 +200,7 @@ func (b *Builder) addURLEncodedBody(ctx context.Context, jsonnetSnippet []byte, 
 	}
 
 	values := map[string]string{}
-	if err := json.Unmarshal([]byte(res), &values); err != nil {
+	if err = json.Unmarshal([]byte(res), &values); err != nil {
 		return errors.WithStack(err)
 	}
 
@@ -231,6 +233,27 @@ func (b *Builder) BuildRequest(ctx context.Context, body interface{}) (*retryabl
 	}
 
 	return b.r, nil
+}
+
+func (b *Builder) RenderHeadersWithTemplates(headers http.Header) {
+	for k := range b.r.Header {
+		v := b.r.Header.Get(k)
+		if len(v) == 0 {
+			continue
+		}
+		if strings.Contains(v, "{{") && strings.Contains(v, "}}") {
+			tpl, err := template.New("").Funcs(sprig.TxtFuncMap()).Parse(v)
+			if err != nil {
+				continue
+			}
+			var buf bytes.Buffer
+			if err = tpl.Execute(&buf, headers); err != nil {
+				continue
+			} else {
+				b.r.Header.Set(k, buf.String())
+			}
+		}
+	}
 }
 
 func (b *Builder) readTemplate(ctx context.Context) ([]byte, error) {
