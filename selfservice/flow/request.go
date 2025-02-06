@@ -40,6 +40,12 @@ func EnsureCSRF(
 	generator func(r *http.Request) string,
 	actual string,
 ) error {
+	if r != nil {
+		if len(r.Header) > 0 && r.Header.Get("X-Correlation-ID") != "" {
+			ctx := context.WithValue(r.Context(), "x-correlation-id", r.Header.Get("X-Correlation-ID"))
+			*r = *(r.Clone(ctx))
+		}
+	}
 	switch flowType {
 	case TypeAPI:
 		if disableAPIFlowEnforcement {
