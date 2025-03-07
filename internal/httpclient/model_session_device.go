@@ -17,12 +17,16 @@ import (
 
 // SessionDevice Device corresponding to a Session
 type SessionDevice struct {
+	// A list of authenticators which were used to authenticate the session.
+	AuthenticationMethods []SessionAuthenticationMethod `json:"authentication_methods,omitempty"`
 	// Device record ID
 	Id string `json:"id"`
 	// IPAddress of the client
 	IpAddress *string `json:"ip_address,omitempty"`
 	// Geo Location corresponding to the IP Address
 	Location *string `json:"location,omitempty"`
+	// Is this device trusted? (only matters if this device submitted aal2+ credentials)
+	Trusted *bool `json:"trusted,omitempty"`
 	// UserAgent of the client
 	UserAgent *string `json:"user_agent,omitempty"`
 }
@@ -43,6 +47,38 @@ func NewSessionDevice(id string) *SessionDevice {
 func NewSessionDeviceWithDefaults() *SessionDevice {
 	this := SessionDevice{}
 	return &this
+}
+
+// GetAuthenticationMethods returns the AuthenticationMethods field value if set, zero value otherwise.
+func (o *SessionDevice) GetAuthenticationMethods() []SessionAuthenticationMethod {
+	if o == nil || o.AuthenticationMethods == nil {
+		var ret []SessionAuthenticationMethod
+		return ret
+	}
+	return o.AuthenticationMethods
+}
+
+// GetAuthenticationMethodsOk returns a tuple with the AuthenticationMethods field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *SessionDevice) GetAuthenticationMethodsOk() ([]SessionAuthenticationMethod, bool) {
+	if o == nil || o.AuthenticationMethods == nil {
+		return nil, false
+	}
+	return o.AuthenticationMethods, true
+}
+
+// HasAuthenticationMethods returns a boolean if a field has been set.
+func (o *SessionDevice) HasAuthenticationMethods() bool {
+	if o != nil && o.AuthenticationMethods != nil {
+		return true
+	}
+
+	return false
+}
+
+// SetAuthenticationMethods gets a reference to the given []SessionAuthenticationMethod and assigns it to the AuthenticationMethods field.
+func (o *SessionDevice) SetAuthenticationMethods(v []SessionAuthenticationMethod) {
+	o.AuthenticationMethods = v
 }
 
 // GetId returns the Id field value
@@ -133,6 +169,38 @@ func (o *SessionDevice) SetLocation(v string) {
 	o.Location = &v
 }
 
+// GetTrusted returns the Trusted field value if set, zero value otherwise.
+func (o *SessionDevice) GetTrusted() bool {
+	if o == nil || o.Trusted == nil {
+		var ret bool
+		return ret
+	}
+	return *o.Trusted
+}
+
+// GetTrustedOk returns a tuple with the Trusted field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *SessionDevice) GetTrustedOk() (*bool, bool) {
+	if o == nil || o.Trusted == nil {
+		return nil, false
+	}
+	return o.Trusted, true
+}
+
+// HasTrusted returns a boolean if a field has been set.
+func (o *SessionDevice) HasTrusted() bool {
+	if o != nil && o.Trusted != nil {
+		return true
+	}
+
+	return false
+}
+
+// SetTrusted gets a reference to the given bool and assigns it to the Trusted field.
+func (o *SessionDevice) SetTrusted(v bool) {
+	o.Trusted = &v
+}
+
 // GetUserAgent returns the UserAgent field value if set, zero value otherwise.
 func (o *SessionDevice) GetUserAgent() string {
 	if o == nil || o.UserAgent == nil {
@@ -167,6 +235,9 @@ func (o *SessionDevice) SetUserAgent(v string) {
 
 func (o SessionDevice) MarshalJSON() ([]byte, error) {
 	toSerialize := map[string]interface{}{}
+	if o.AuthenticationMethods != nil {
+		toSerialize["authentication_methods"] = o.AuthenticationMethods
+	}
 	if true {
 		toSerialize["id"] = o.Id
 	}
@@ -175,6 +246,9 @@ func (o SessionDevice) MarshalJSON() ([]byte, error) {
 	}
 	if o.Location != nil {
 		toSerialize["location"] = o.Location
+	}
+	if o.Trusted != nil {
+		toSerialize["trusted"] = o.Trusted
 	}
 	if o.UserAgent != nil {
 		toSerialize["user_agent"] = o.UserAgent

@@ -98,6 +98,13 @@ func servePublic(r driver.Registry, cmd *cobra.Command, eg *errgroup.Group, slOp
 	n.Use(publicLogger)
 	n.Use(x.HTTPLoaderContextMiddleware(r))
 	n.Use(sqa(ctx, cmd, r))
+	n.UseFunc(func(w http.ResponseWriter, req *http.Request, next http.HandlerFunc) {
+		if dev := session.CurrentDeviceForRequest(req); dev != nil && dev.Fingerprint != nil {
+			l.WithRequest(req).WithField("device", dev.Fingerprint).Trace("admin: set device to context")
+		}
+
+		next(w, req)
+	})
 
 	n.Use(r.PrometheusManager())
 
@@ -193,6 +200,13 @@ func serveAdmin(r driver.Registry, cmd *cobra.Command, eg *errgroup.Group, slOpt
 	n.UseFunc(x.RedirectAdminMiddleware)
 	n.Use(x.HTTPLoaderContextMiddleware(r))
 	n.Use(sqa(ctx, cmd, r))
+	n.UseFunc(func(w http.ResponseWriter, req *http.Request, next http.HandlerFunc) {
+		if dev := session.CurrentDeviceForRequest(req); dev != nil && dev.Fingerprint != nil {
+			l.WithRequest(req).WithField("device", dev.Fingerprint).Trace("admin: set device to context")
+		}
+
+		next(w, req)
+	})
 	n.Use(r.PrometheusManager())
 
 	router := x.NewRouterAdmin()

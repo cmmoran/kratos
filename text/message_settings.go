@@ -79,6 +79,14 @@ func NewInfoSelfServiceSettingsRegenerateLookup() *Message {
 	}
 }
 
+func NewInfoSelfServiceSettingsEnableMethod() *Message {
+	return &Message{
+		ID:   InfoSelfServiceSettingsEnableMethod,
+		Text: "Enable this method",
+		Type: Info,
+	}
+}
+
 func NewInfoSelfServiceSettingsDisableLookup() *Message {
 	return &Message{
 		ID:   InfoSelfServiceSettingsDisableLookup,

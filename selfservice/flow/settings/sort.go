@@ -17,6 +17,7 @@ func sortNodes(ctx context.Context, n node.Nodes, schemaRef string) error {
 			node.ProfileGroup,
 			node.PasswordGroup,
 			node.OpenIDConnectGroup,
+			node.CodeGroup,
 			node.LookupGroup,
 			node.WebAuthnGroup,
 			node.TOTPGroup,
@@ -38,6 +39,10 @@ func sortNodes(ctx context.Context, n node.Nodes, schemaRef string) error {
 			node.TOTPSecretKey,
 			node.TOTPUnlink,
 			node.TOTPCode,
+
+			// Code
+			node.CodeEnable,
+			node.CodeDisable,
 		}),
 	)
 }

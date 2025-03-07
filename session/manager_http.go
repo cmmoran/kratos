@@ -326,6 +326,8 @@ func (s *ManagerHTTP) DoesSessionSatisfy(ctx context.Context, sess *Session, req
 			return nil
 		}
 		return NewErrAALNotSatisfied(loginURL.String())
+	case config.DeviceTrustBasedAAL:
+		fallthrough
 	case config.HighestAvailableAAL:
 		if sess.AuthenticatorAssuranceLevel == identity.AuthenticatorAssuranceLevel2 {
 			// The session has AAL2, nothing to check.
@@ -340,6 +342,12 @@ func (s *ManagerHTTP) DoesSessionSatisfy(ctx context.Context, sess *Session, req
 			if err != nil {
 				return err
 			}
+		}
+
+		if requestedAAL == config.DeviceTrustBasedAAL {
+			currentDevice := CurrentDeviceForContext(ctx)
+			s.adjustSessionAAL(ctx, sess, currentDevice, sess.Identity)
+			sess.SetAuthenticatorAssuranceLevel()
 		}
 
 		if aal, ok := sess.Identity.InternalAvailableAAL.ToAAL(); ok && aal == identity.AuthenticatorAssuranceLevel2 {
@@ -470,7 +478,10 @@ func (s *ManagerHTTP) ActivateSession(r *http.Request, session *Session, i *iden
 	session.ExpiresAt = authenticatedAt.Add(s.r.Config().SessionLifespan(ctx))
 	session.AuthenticatedAt = authenticatedAt
 
-	session.SetSessionDeviceInformation(r.WithContext(ctx))
+	currentDevice := session.SetSessionDeviceInformation(r.WithContext(ctx))
+	s.r.Audit().WithField("current_device", currentDevice).WithField("devices", session.Devices).Info("activatesession: current_device")
+	s.adjustSessionAAL(ctx, session, currentDevice, i)
+
 	session.SetAuthenticatorAssuranceLevel()
 
 	span.SetAttributes(
@@ -478,4 +489,39 @@ func (s *ManagerHTTP) ActivateSession(r *http.Request, session *Session, i *iden
 	)
 
 	return nil
+}
+
+func (s *ManagerHTTP) adjustSessionAAL(ctx context.Context, sess *Session, currentDevice *Device, i *identity.Identity) {
+	var err error
+	iaal := identity.AuthenticatorAssuranceLevel1
+	if iaalRaw, ok := i.InternalAvailableAAL.ToAAL(); ok {
+		iaal = iaalRaw
+	}
+	if currentDevice.Fingerprint != nil && (iaal > identity.AuthenticatorAssuranceLevel1) && (currentDevice.AMR == nil || len(currentDevice.AMR) == 0) { // Don't perform the list devices call if there's no fingerprint anyway
+		trustedDevices := make([]Device, 0)
+		if trustedDevices, err = s.r.SessionPersister().ListTrustedDevicesByIdentity(ctx, i.ID); err == nil && len(trustedDevices) > 0 {
+			s.r.Audit().WithField("session_trusted_devices", sess.TrustedDevices).WithField("trusted_devices", trustedDevices).WithField("current_device", currentDevice).Info("comparing current_device to trusted_devices")
+			if currentDevice.DeviceTrustConfidence(trustedDevices) > 0.0 {
+				for _, td := range trustedDevices {
+					if td.AMR == nil {
+						continue
+					}
+					for _, amr := range td.AMR {
+						if _, ok := i.GetCredentials(amr.Method); ok {
+							now := time.Now().UTC()
+							trustDeviceExpiration := amr.CompletedAt.UTC().Add(s.r.Config().SecurityTrustDeviceDuration(ctx))
+							if amr.AAL > sess.AuthenticatorAssuranceLevel && now.Before(trustDeviceExpiration) {
+								s.r.Audit().WithField("amr", amr).WithField("trusted_device", td).Trace("device trusted; adding aal2+ for this trusted device")
+								amr.DeviceTrustBased = true
+								sess.CompletedLoginForMethod(amr)
+								break
+							} else if now.After(trustDeviceExpiration) {
+								s.r.Audit().WithField("amr", amr).WithField("trusted_device", td).Trace("device trust is too old; not adding aal2+ for this trusted device")
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 }
