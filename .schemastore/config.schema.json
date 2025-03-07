@@ -1798,6 +1798,17 @@
                         "1s"
                       ]
                     },
+                    "mfa_lifespan": {
+                      "title": "How long a code (mfa) is valid for",
+                      "type": "string",
+                      "pattern": "^([0-9]+(ns|us|ms|s|m|h))+$",
+                      "default": "10m",
+                      "examples": [
+                        "1h",
+                        "1m",
+                        "1s"
+                      ]
+                    },
                     "missing_credential_fallback_enabled": {
                       "type": "boolean",
                       "title": "Enable Code OTP as a Fallback",

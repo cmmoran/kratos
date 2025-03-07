@@ -185,6 +185,7 @@ const (
 	ViperKeyLinkLifespan                                     = "selfservice.methods.link.config.lifespan"
 	ViperKeyLinkBaseURL                                      = "selfservice.methods.link.config.base_url"
 	ViperKeyCodeLifespan                                     = "selfservice.methods.code.config.lifespan"
+	ViperKeyCodeMfaLifespan                                  = "selfservice.methods.code.config.mfa_lifespan"
 	ViperKeyCodeConfigMissingCredentialFallbackEnabled       = "selfservice.methods.code.config.missing_credential_fallback_enabled"
 	ViperKeyPasswordHaveIBeenPwnedHost                       = "selfservice.methods.password.config.haveibeenpwned_host"
 	ViperKeyPasswordHaveIBeenPwnedEnabled                    = "selfservice.methods.password.config.haveibeenpwned_enabled"
@@ -1685,4 +1686,8 @@ func (p *Config) SecurityAccountEnumerationMitigate(ctx context.Context) bool {
 
 func (p *Config) SecurityTrustDeviceDuration(ctx context.Context) time.Duration {
 	return p.GetProvider(ctx).DurationF(ViperKeySecurityTrustDeviceDuration, time.Hour*24*30)
+}
+
+func (p *Config) SelfServiceCodeMethodMfaLifespan(ctx context.Context) time.Duration {
+	return p.GetProvider(ctx).DurationF(ViperKeyCodeMfaLifespan, time.Minute*10)
 }
