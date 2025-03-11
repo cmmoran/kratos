@@ -126,10 +126,12 @@ Class | Method | HTTP request | Description
 *IdentityAPI* | [**GetIdentitySchema**](docs/IdentityAPI.md#getidentityschema) | **Get** /schemas/{id} | Get Identity JSON Schema
 *IdentityAPI* | [**GetSession**](docs/IdentityAPI.md#getsession) | **Get** /admin/sessions/{id} | Get Session
 *IdentityAPI* | [**ListIdentities**](docs/IdentityAPI.md#listidentities) | **Get** /admin/identities | List Identities
+*IdentityAPI* | [**ListIdentityDevices**](docs/IdentityAPI.md#listidentitydevices) | **Get** /admin/identities/{id}/devices | List an Identity&#39;s trusted devices
 *IdentityAPI* | [**ListIdentitySchemas**](docs/IdentityAPI.md#listidentityschemas) | **Get** /schemas | Get all Identity Schemas
 *IdentityAPI* | [**ListIdentitySessions**](docs/IdentityAPI.md#listidentitysessions) | **Get** /admin/identities/{id}/sessions | List an Identity&#39;s Sessions
 *IdentityAPI* | [**ListSessions**](docs/IdentityAPI.md#listsessions) | **Get** /admin/sessions | List All Sessions
 *IdentityAPI* | [**PatchIdentity**](docs/IdentityAPI.md#patchidentity) | **Patch** /admin/identities/{id} | Patch an Identity
+*IdentityAPI* | [**PatchIdentityDevices**](docs/IdentityAPI.md#patchidentitydevices) | **Patch** /admin/identities/{id}/devices/{device_id} | Patch an Identity&#39;s devices
 *IdentityAPI* | [**UpdateIdentity**](docs/IdentityAPI.md#updateidentity) | **Put** /admin/identities/{id} | Update an Identity
 *MetadataAPI* | [**GetVersion**](docs/MetadataAPI.md#getversion) | **Get** /version | Return Running Software Version.
 *MetadataAPI* | [**IsAlive**](docs/MetadataAPI.md#isalive) | **Get** /health/alive | Check HTTP Server Status

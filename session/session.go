@@ -37,6 +37,10 @@ type refreshWindowProvider interface {
 	SessionRefreshMinTimeLeft(ctx context.Context) time.Duration
 }
 
+type deviceKey struct{}
+
+var DeviceKey = deviceKey{}
+
 // Device corresponding to a Session
 //
 // swagger:model sessionDevice
@@ -58,6 +62,19 @@ type Device struct {
 	// Geo Location corresponding to the IP Address
 	Location *string `json:"location" faker:"ptr_geo_location" db:"location"`
 
+	// Is this device trusted? (only matters if this device submitted aal2+ credentials)
+	Trusted bool `json:"trusted" faker:"-" db:"trusted"`
+	// Set this device as a pending-trust device, because `UpsertSession` has weird logic
+	TrustPending *bool `json:"-" faker:"-" db:"-"`
+
+	// Device fingerprint as reported by any compatible 3rd party generator
+	Fingerprint *string `json:"-" faker:"-" db:"fingerprint"`
+
+	// Authentication Method References (AMR)
+	//
+	// A list of authentication methods (e.g. password, oidc, ...) used with this device.
+	AMR AuthenticationMethods `json:"authentication_methods" db:"authentication_methods"`
+
 	// Time of capture
 	CreatedAt time.Time `json:"-" faker:"-" db:"created_at"`
 
@@ -69,6 +86,31 @@ type Device struct {
 
 func (m Device) TableName(ctx context.Context) string {
 	return "session_devices"
+}
+
+func (m Device) DeviceTrustConfidence(devices []Device) float64 {
+	if m.Fingerprint == nil || len(devices) == 0 {
+		return 0.0
+	}
+	for _, d := range devices {
+		if d.Fingerprint == nil {
+			continue
+		}
+		if *d.Fingerprint == *m.Fingerprint {
+			return 1.0
+		}
+	}
+
+	return 0.0
+}
+
+func (m *Device) SameDevice(other *Device) bool {
+	return ((m.ID.IsNil() != other.ID.IsNil()) || m.ID == other.ID) &&
+		m.SessionID == other.SessionID &&
+		pointerx.Deref(m.Location) == pointerx.Deref(other.Location) &&
+		pointerx.Deref(m.Fingerprint) == pointerx.Deref(other.Fingerprint) &&
+		pointerx.Deref(m.IPAddress) == pointerx.Deref(other.IPAddress) &&
+		pointerx.Deref(m.UserAgent) == pointerx.Deref(other.UserAgent)
 }
 
 // A Session
@@ -108,7 +150,7 @@ type Session struct {
 	// Authentication Method References (AMR)
 	//
 	// A list of authentication methods (e.g. password, oidc, ...) used to issue this session.
-	AMR AuthenticationMethods `db:"authentication_methods" json:"authentication_methods"`
+	AMR AuthenticationMethods `json:"authentication_methods" db:"authentication_methods"`
 
 	// The Session Issuance Timestamp
 	//
@@ -131,6 +173,9 @@ type Session struct {
 	// Devices has history of all endpoints where the session was used
 	Devices []Device `json:"devices" faker:"-" has_many:"session_devices" fk_id:"session_id"`
 
+	// TrustedDevices are devices that have been explicitly trusted via `trust_device` checkbox of aal2 login strategies
+	TrustedDevices []Device `json:"-" faker:"-" db:"-"`
+
 	// IdentityID is a helper struct field for gobuffalo.pop.
 	IdentityID uuid.UUID `json:"-" faker:"-" db:"identity_id"`
 
@@ -152,6 +197,63 @@ type Session struct {
 	NID   uuid.UUID `json:"-"  faker:"-" db:"nid"`
 }
 
+func CurrentDeviceForContext(ctx context.Context) *Device {
+	if dev, ok := ctx.Value(DeviceKey).(*Device); ok {
+		return dev
+	}
+
+	return nil
+}
+
+func CurrentDeviceForRequest(r *http.Request) *Device {
+	if r == nil || r.Context() == nil {
+		return nil
+	}
+	ctx := r.Context()
+	if dev, ok := ctx.Value(DeviceKey).(*Device); ok {
+		return dev
+	} else {
+		dev = &Device{
+			IPAddress: pointerx.Ptr(httpx.ClientIP(r)),
+			AMR:       make(AuthenticationMethods, 0),
+		}
+
+		agent := r.Header["User-Agent"]
+		if len(agent) > 0 {
+			dev.UserAgent = pointerx.Ptr(strings.Join(agent, " "))
+		}
+
+		var clientGeoLocation []string
+		if r.Header.Get("Cf-Ipcity") != "" {
+			clientGeoLocation = append(clientGeoLocation, r.Header.Get("Cf-Ipcity"))
+		} else if r.Header.Get("Ip-City") != "" {
+			clientGeoLocation = append(clientGeoLocation, r.Header.Get("Ip-City"))
+		}
+		if r.Header.Get("Cf-Ipcountry") != "" {
+			clientGeoLocation = append(clientGeoLocation, r.Header.Get("Cf-Ipcountry"))
+		} else if r.Header.Get("Ip-Country") != "" {
+			clientGeoLocation = append(clientGeoLocation, r.Header.Get("Ip-Country"))
+		}
+		if r.Header.Get("Asn-System-Number") != "" {
+			clientGeoLocation = append(clientGeoLocation, r.Header.Get("Asn-System-Number"))
+		}
+		if r.Header.Get("Asn-Network") != "" {
+			clientGeoLocation = append(clientGeoLocation, r.Header.Get("Asn-Network"))
+		}
+		if r.Header.Get("Asn-System-Org") != "" {
+			clientGeoLocation = append(clientGeoLocation, r.Header.Get("Asn-System-Org"))
+		}
+		dev.Location = pointerx.Ptr(strings.Join(clientGeoLocation, ", "))
+
+		if r.Header.Get("X-Session-Entropy") != "" {
+			dev.Fingerprint = pointerx.Ptr(r.Header.Get("X-Session-Entropy"))
+		}
+		ctx = context.WithValue(ctx, DeviceKey, dev)
+		*r = *r.Clone(ctx)
+		return dev
+	}
+}
+
 func (s Session) PageToken() keysetpagination.PageToken {
 	return keysetpagination.MapPageToken{
 		"id":         s.ID.String(),
@@ -159,7 +261,7 @@ func (s Session) PageToken() keysetpagination.PageToken {
 	}
 }
 
-func (m Session) DefaultPageToken() keysetpagination.PageToken {
+func (s Session) DefaultPageToken() keysetpagination.PageToken {
 	return keysetpagination.MapPageToken{
 		"id":         uuid.Nil.String(),
 		"created_at": time.Date(2200, 12, 31, 23, 59, 59, 0, time.UTC).Format(x.MapPaginationDateFormat),
@@ -256,27 +358,18 @@ func NewInactiveSession() *Session {
 	}
 }
 
-func (s *Session) SetSessionDeviceInformation(r *http.Request) {
-	device := Device{
-		SessionID: s.ID,
-		IPAddress: pointerx.Ptr(httpx.ClientIP(r)),
+func (s *Session) SetSessionDeviceInformation(r *http.Request) *Device {
+	device := CurrentDeviceForRequest(r)
+	(*device).SessionID = s.ID
+	for i := range s.Devices {
+		dev := &(s.Devices[i])
+		if dev.SameDevice(device) {
+			return dev
+		}
 	}
+	s.Devices = append(s.Devices, *device)
 
-	agent := r.Header["User-Agent"]
-	if len(agent) > 0 {
-		device.UserAgent = pointerx.Ptr(strings.Join(agent, " "))
-	}
-
-	var clientGeoLocation []string
-	if r.Header.Get("Cf-Ipcity") != "" {
-		clientGeoLocation = append(clientGeoLocation, r.Header.Get("Cf-Ipcity"))
-	}
-	if r.Header.Get("Cf-Ipcountry") != "" {
-		clientGeoLocation = append(clientGeoLocation, r.Header.Get("Cf-Ipcountry"))
-	}
-	device.Location = pointerx.Ptr(strings.Join(clientGeoLocation, ", "))
-
-	s.Devices = append(s.Devices, device)
+	return device
 }
 
 func (s Session) Declassified() *Session {
@@ -331,6 +424,9 @@ type AuthenticationMethod struct {
 
 	// The Organization id used for authentication
 	Organization string `json:"organization,omitempty"`
+
+	// DeviceTrustBased indicates that this authentication method was added due to device trust
+	DeviceTrustBased bool `json:"device_trust_based,omitempty"`
 }
 
 // Scan implements the Scanner interface.

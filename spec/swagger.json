@@ -740,6 +740,127 @@
         }
       }
     },
+    "/admin/identities/{id}/devices": {
+      "get": {
+        "security": [
+          {
+            "oryAccessToken": []
+          }
+        ],
+        "description": "This endpoint returns all trusted devices for any sessions that belong to the given Identity.",
+        "schemes": [
+          "http",
+          "https"
+        ],
+        "tags": [
+          "identity"
+        ],
+        "summary": "List an Identity's trusted devices",
+        "operationId": "listIdentityDevices",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "ID is the identity's ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/responses/listIdentityDevices"
+          },
+          "400": {
+            "description": "errorGeneric",
+            "schema": {
+              "$ref": "#/definitions/errorGeneric"
+            }
+          },
+          "404": {
+            "description": "errorGeneric",
+            "schema": {
+              "$ref": "#/definitions/errorGeneric"
+            }
+          },
+          "default": {
+            "description": "errorGeneric",
+            "schema": {
+              "$ref": "#/definitions/errorGeneric"
+            }
+          }
+        }
+      }
+    },
+    "/admin/identities/{id}/devices/{device_id}": {
+      "patch": {
+        "security": [
+          {
+            "oryAccessToken": []
+          }
+        ],
+        "description": "Partially updates an identity's device's trusted field using [JSON Patch](https://jsonpatch.com/).\nOnly the field `trusted` can be updated using this method. Even that can only be set to `false` using this method.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "http",
+          "https"
+        ],
+        "tags": [
+          "identity"
+        ],
+        "summary": "Patch an Identity's devices",
+        "operationId": "patchIdentityDevices",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "ID is the session's ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "DeviceID is the Identity's Device's ID.",
+            "name": "device_id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/responses/listIdentityDevices"
+          },
+          "400": {
+            "description": "errorGeneric",
+            "schema": {
+              "$ref": "#/definitions/errorGeneric"
+            }
+          },
+          "404": {
+            "description": "errorGeneric",
+            "schema": {
+              "$ref": "#/definitions/errorGeneric"
+            }
+          },
+          "409": {
+            "description": "errorGeneric",
+            "schema": {
+              "$ref": "#/definitions/errorGeneric"
+            }
+          },
+          "default": {
+            "description": "errorGeneric",
+            "schema": {
+              "$ref": "#/definitions/errorGeneric"
+            }
+          }
+        }
+      }
+    },
     "/admin/identities/{id}/sessions": {
       "get": {
         "security": [
@@ -5321,6 +5442,10 @@
           "type": "string",
           "format": "date-time"
         },
+        "device_trust_based": {
+          "description": "DeviceTrustBased indicates that this authentication method was added due to device trust",
+          "type": "boolean"
+        },
         "method": {
           "description": "The method used in this authenticator.\npassword CredentialsTypePassword\noidc CredentialsTypeOIDC\ntotp CredentialsTypeTOTP\nlookup_secret CredentialsTypeLookup\nwebauthn CredentialsTypeWebAuthn\ncode CredentialsTypeCodeAuth\npasskey CredentialsTypePasskey\nprofile CredentialsTypeProfile\nsaml CredentialsTypeSAML\nlink_recovery CredentialsTypeRecoveryLink  CredentialsTypeRecoveryLink is a special credential type linked to the link strategy (recovery flow).  It is not used within the credentials object itself.\ncode_recovery CredentialsTypeRecoveryCode",
           "type": "string",
@@ -5364,6 +5489,9 @@
         "id"
       ],
       "properties": {
+        "authentication_methods": {
+          "$ref": "#/definitions/sessionAuthenticationMethods"
+        },
         "id": {
           "description": "Device record ID",
           "type": "string",
@@ -5376,6 +5504,10 @@
         "location": {
           "description": "Geo Location corresponding to the IP Address",
           "type": "string"
+        },
+        "trusted": {
+          "description": "Is this device trusted? (only matters if this device submitted aal2+ credentials)",
+          "type": "boolean"
         },
         "user_agent": {
           "description": "UserAgent of the client",
@@ -6095,6 +6227,10 @@
         "transient_payload": {
           "description": "Transient data to pass along to any webhooks",
           "type": "object"
+        },
+        "trust_device": {
+          "description": "Trust this device",
+          "type": "boolean"
         }
       }
     },
@@ -6293,6 +6429,10 @@
         "transient_payload": {
           "description": "Transient data to pass along to any webhooks",
           "type": "object"
+        },
+        "trust_device": {
+          "description": "Trust this device",
+          "type": "boolean"
         }
       }
     },
@@ -7130,6 +7270,15 @@
           "type": "integer",
           "format": "int64",
           "description": "The X-Total-Count HTTP Header\n\nThe `X-Total-Count` header contains the total number of items in the collection.\n\nDEPRECATED: This header will be removed eventually. Please use the `Link` header\ninstead to check whether you are on the last page."
+        }
+      }
+    },
+    "listIdentityDevices": {
+      "description": "List Identity Devices Response",
+      "schema": {
+        "type": "array",
+        "items": {
+          "$ref": "#/definitions/sessionDevice"
         }
       }
     },

@@ -43,3 +43,37 @@ func (p *DevicePersister) CreateDevice(ctx context.Context, d *session.Device) e
 	d.NID = p.NetworkID(ctx)
 	return sqlcon.HandleError(popx.GetConnection(ctx, p.c.WithContext(ctx)).Create(d))
 }
+
+func (p *DevicePersister) UpsertDevice(ctx context.Context, d *session.Device) error {
+	d.NID = p.NetworkID(ctx)
+	q := popx.GetConnection(ctx, p.c.WithContext(ctx))
+
+	currentDevice := new(session.Device)
+
+	if d.ID.IsNil() {
+		if !d.SessionID.IsNil() {
+			if err := q.Q().Where("session_id = ? AND nid = ?", d.SessionID, d.NID).First(currentDevice); err != nil {
+				return sqlcon.HandleError(err)
+			}
+			d.ID = currentDevice.ID
+		}
+	}
+
+	if d.ID.IsNil() {
+		return sqlcon.HandleError(q.Create(d))
+	} else {
+		return sqlcon.HandleError(q.UpdateColumns(d, "trusted", "authentication_methods"))
+	}
+}
+
+func (p *DevicePersister) ListTrustedDevicesByIdentity(ctx context.Context, iID uuid.UUID) ([]session.Device, error) {
+	nid := p.NetworkID(ctx)
+
+	std := make([]session.Device, 0)
+	q := popx.GetConnection(ctx, p.c.WithContext(ctx)).Q()
+	if err := q.Where("session_id IN (select id from sessions where identity_id = ?) AND nid = ? AND trusted = true AND fingerprint IS NOT NULL", iID, nid).All(&std); err != nil {
+		return nil, sqlcon.HandleError(err)
+	}
+
+	return std, nil
+}

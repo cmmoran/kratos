@@ -176,7 +176,7 @@ func (e *HookExecutor) PostLoginHook(
 		WithRequest(r).
 		WithField("identity_id", i.ID).
 		WithField("flow_method", f.Active).
-		Debug("Running ExecuteLoginPostHook.")
+		Trace("Running ExecuteLoginPostHook.")
 	for k, executor := range e.d.PostLoginHooks(ctx, f.Active) {
 		if err := executor.ExecuteLoginPostHook(w, r, g, f, s); err != nil {
 			if errors.Is(err, ErrHookAbortFlow) {
@@ -203,7 +203,7 @@ func (e *HookExecutor) PostLoginHook(
 			WithField("executors", PostHookExecutorNames(e.d.PostLoginHooks(ctx, f.Active))).
 			WithField("identity_id", i.ID).
 			WithField("flow_method", f.Active).
-			Debug("ExecuteLoginPostHook completed successfully.")
+			Trace("ExecuteLoginPostHook completed successfully.")
 	}
 
 	if f.Type == flow.TypeAPI {

@@ -41,6 +41,9 @@ func FindCodeAddressCandidates(i *identity.Identity, fallbackEnabled bool) (resu
 				return nil, false, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to unmarshal credentials config: %s", err))
 			}
 		}
+		if conf.Disabled {
+			return nil, false, nil
+		}
 
 		if len(conf.Addresses) == 0 {
 			if !fallbackEnabled {

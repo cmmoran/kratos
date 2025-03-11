@@ -28,6 +28,9 @@
     "csrf_token": {
       "type": "string"
     },
+    "trust_device": {
+      "type": "boolean"
+    },
     "transient_payload": {
       "type": "object",
       "additionalProperties": true

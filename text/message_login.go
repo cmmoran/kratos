@@ -39,6 +39,13 @@ func NewInfoLoginTOTPLabel() *Message {
 		Text: "Authentication code",
 	}
 }
+func NewInfoTrustDeviceLabel() *Message {
+	return &Message{
+		ID:   InfoSelfServiceLoginTrustDeviceLabel,
+		Type: Info,
+		Text: "Trust this device",
+	}
+}
 
 func NewInfoLoginLookupLabel() *Message {
 	return &Message{

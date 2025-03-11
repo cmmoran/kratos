@@ -26,7 +26,7 @@ func (p *Persister) CreateLoginCode(ctx context.Context, params *code.CreateLogi
 		AddressType: params.AddressType,
 		CodeHMAC:    p.hmacValue(ctx, params.RawCode),
 		IssuedAt:    now,
-		ExpiresAt:   now.UTC().Add(p.r.Config().SelfServiceCodeMethodLifespan(ctx)),
+		ExpiresAt:   now.UTC().Add(params.ExpiresIn),
 		FlowID:      params.FlowID,
 		NID:         p.NetworkID(ctx),
 		ID:          uuid.Nil,
