@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gofrs/uuid"
+
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.opentelemetry.io/otel/attribute"
@@ -69,6 +71,11 @@ type updateLoginFlowWithCodeMethod struct {
 	// Resend is set when the user wants to resend the code
 	// required: false
 	Resend string `json:"resend" form:"resend"`
+
+	// Trust this device
+	//
+	// required: false
+	TrustDevice bool `json:"trust_device" form:"trust_device"`
 
 	// Transient data to pass along to any webhooks
 	//
@@ -236,6 +243,24 @@ func (s *Strategy) Login(w http.ResponseWriter, r *http.Request, f *login.Flow, 
 		i, err := s.loginVerifyCode(ctx, f, &p, sess)
 		if err != nil {
 			return nil, s.HandleLoginError(r, f, &p, err, true)
+		}
+		if p.TrustDevice {
+			currentDevice := sess.SetSessionDeviceInformation(r.WithContext(ctx))
+			if currentDevice.DeviceTrustConfidence(sess.Devices) > 0.0 {
+				method := s.CompletedAuthenticationMethod(ctx)
+				method.DeviceTrustBased = true
+				method.CompletedAt = time.Now().UTC()
+				if currentDevice.SessionID == uuid.Nil || currentDevice.SessionID != sess.ID {
+					s.deps.Audit().WithRequest(r).WithField("current_device", *currentDevice).Warn("current device session id mismatch")
+					(*currentDevice).SessionID = sess.ID
+				}
+				(*currentDevice).TrustPending = pointerx.Ptr(p.TrustDevice)
+				(*currentDevice).AMR = append((*currentDevice).AMR, method)
+				s.deps.Audit().WithRequest(r).WithField("current_device", *currentDevice).WithField("devices", sess.Devices).WithField("amr", method).Debug("setting device to trusted")
+				if err = s.deps.SessionPersister().UpsertDevice(ctx, currentDevice); err != nil {
+					return i, errors.WithStack(herodot.ErrInternalServerError.WithReason("Could not update device").WithDebug(err.Error()))
+				}
+			}
 		}
 		return i, nil
 	case flow.StatePassedChallenge:
@@ -569,9 +594,7 @@ func (s *Strategy) PopulateLoginMethodIdentifierFirstCredentials(r *http.Request
 		return errors.WithStack(idfirst.ErrNoCredentialsFound)
 	}
 
-	f.GetUI().Nodes.Append(
-		node.NewInputField("method", s.ID(), node.CodeGroup, node.InputAttributeTypeSubmit).WithMetaLabel(text.NewInfoSelfServiceLoginCode()),
-	)
+	f.GetUI().Nodes.Append(node.NewInputField("method", s.ID(), node.CodeGroup, node.InputAttributeTypeSubmit).WithMetaLabel(text.NewInfoSelfServiceLoginCode()))
 	return nil
 }
 

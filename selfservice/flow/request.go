@@ -40,6 +40,7 @@ func EnsureCSRF(
 	generator func(r *http.Request) string,
 	actual string,
 ) error {
+	maybeAddHeadersToRequestContext(r, "X-Correlation-Id", "X-Session-Entropy")
 	switch flowType {
 	case TypeAPI:
 		if disableAPIFlowEnforcement {
@@ -114,4 +115,16 @@ func MethodEnabledAndAllowed(ctx context.Context, _ FlowName, expected, actual s
 	}
 
 	return nil
+}
+
+func maybeAddHeadersToRequestContext(r *http.Request, keys ...string) {
+	if r == nil || len(r.Header) == 0 {
+		return
+	}
+	for _, key := range keys {
+		if r.Header.Get(key) != "" {
+			ctx := context.WithValue(r.Context(), strings.ToLower(key), r.Header.Get(key))
+			*r = *(r.Clone(ctx))
+		}
+	}
 }

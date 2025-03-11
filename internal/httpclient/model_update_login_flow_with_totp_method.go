@@ -25,6 +25,8 @@ type UpdateLoginFlowWithTotpMethod struct {
 	TotpCode string `json:"totp_code"`
 	// Transient data to pass along to any webhooks
 	TransientPayload map[string]interface{} `json:"transient_payload,omitempty"`
+	// Trust this device
+	TrustDevice *bool `json:"trust_device,omitempty"`
 }
 
 // NewUpdateLoginFlowWithTotpMethod instantiates a new UpdateLoginFlowWithTotpMethod object
@@ -158,6 +160,38 @@ func (o *UpdateLoginFlowWithTotpMethod) SetTransientPayload(v map[string]interfa
 	o.TransientPayload = v
 }
 
+// GetTrustDevice returns the TrustDevice field value if set, zero value otherwise.
+func (o *UpdateLoginFlowWithTotpMethod) GetTrustDevice() bool {
+	if o == nil || o.TrustDevice == nil {
+		var ret bool
+		return ret
+	}
+	return *o.TrustDevice
+}
+
+// GetTrustDeviceOk returns a tuple with the TrustDevice field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *UpdateLoginFlowWithTotpMethod) GetTrustDeviceOk() (*bool, bool) {
+	if o == nil || o.TrustDevice == nil {
+		return nil, false
+	}
+	return o.TrustDevice, true
+}
+
+// HasTrustDevice returns a boolean if a field has been set.
+func (o *UpdateLoginFlowWithTotpMethod) HasTrustDevice() bool {
+	if o != nil && o.TrustDevice != nil {
+		return true
+	}
+
+	return false
+}
+
+// SetTrustDevice gets a reference to the given bool and assigns it to the TrustDevice field.
+func (o *UpdateLoginFlowWithTotpMethod) SetTrustDevice(v bool) {
+	o.TrustDevice = &v
+}
+
 func (o UpdateLoginFlowWithTotpMethod) MarshalJSON() ([]byte, error) {
 	toSerialize := map[string]interface{}{}
 	if o.CsrfToken != nil {
@@ -171,6 +205,9 @@ func (o UpdateLoginFlowWithTotpMethod) MarshalJSON() ([]byte, error) {
 	}
 	if o.TransientPayload != nil {
 		toSerialize["transient_payload"] = o.TransientPayload
+	}
+	if o.TrustDevice != nil {
+		toSerialize["trust_device"] = o.TrustDevice
 	}
 	return json.Marshal(toSerialize)
 }

@@ -21,7 +21,9 @@ type SessionAuthenticationMethod struct {
 	Aal *AuthenticatorAssuranceLevel `json:"aal,omitempty"`
 	// When the authentication challenge was completed.
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
-	Method      *string    `json:"method,omitempty"`
+	// DeviceTrustBased indicates that this authentication method was added due to device trust
+	DeviceTrustBased *bool   `json:"device_trust_based,omitempty"`
+	Method           *string `json:"method,omitempty"`
 	// The Organization id used for authentication
 	Organization *string `json:"organization,omitempty"`
 	// OIDC or SAML provider id used for authentication
@@ -107,6 +109,38 @@ func (o *SessionAuthenticationMethod) HasCompletedAt() bool {
 // SetCompletedAt gets a reference to the given time.Time and assigns it to the CompletedAt field.
 func (o *SessionAuthenticationMethod) SetCompletedAt(v time.Time) {
 	o.CompletedAt = &v
+}
+
+// GetDeviceTrustBased returns the DeviceTrustBased field value if set, zero value otherwise.
+func (o *SessionAuthenticationMethod) GetDeviceTrustBased() bool {
+	if o == nil || o.DeviceTrustBased == nil {
+		var ret bool
+		return ret
+	}
+	return *o.DeviceTrustBased
+}
+
+// GetDeviceTrustBasedOk returns a tuple with the DeviceTrustBased field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *SessionAuthenticationMethod) GetDeviceTrustBasedOk() (*bool, bool) {
+	if o == nil || o.DeviceTrustBased == nil {
+		return nil, false
+	}
+	return o.DeviceTrustBased, true
+}
+
+// HasDeviceTrustBased returns a boolean if a field has been set.
+func (o *SessionAuthenticationMethod) HasDeviceTrustBased() bool {
+	if o != nil && o.DeviceTrustBased != nil {
+		return true
+	}
+
+	return false
+}
+
+// SetDeviceTrustBased gets a reference to the given bool and assigns it to the DeviceTrustBased field.
+func (o *SessionAuthenticationMethod) SetDeviceTrustBased(v bool) {
+	o.DeviceTrustBased = &v
 }
 
 // GetMethod returns the Method field value if set, zero value otherwise.
@@ -212,6 +246,9 @@ func (o SessionAuthenticationMethod) MarshalJSON() ([]byte, error) {
 	}
 	if o.CompletedAt != nil {
 		toSerialize["completed_at"] = o.CompletedAt
+	}
+	if o.DeviceTrustBased != nil {
+		toSerialize["device_trust_based"] = o.DeviceTrustBased
 	}
 	if o.Method != nil {
 		toSerialize["method"] = o.Method
