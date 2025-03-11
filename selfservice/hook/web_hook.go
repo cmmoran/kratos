@@ -327,11 +327,15 @@ func (e *WebHook) execute(ctx context.Context, data *templateContext) error {
 		}
 
 		defer func(startTime time.Time) {
+			var cid string
+			if rawCid := ctx.Value("x-correlation-id"); rawCid != nil {
+				cid = rawCid.(string)
+			}
 			traceID, spanID := span.SpanContext().TraceID(), span.SpanContext().SpanID()
 			logger := e.deps.Logger().WithField("otel", map[string]string{
 				"trace_id": traceID.String(),
 				"span_id":  spanID.String(),
-			}).WithField("duration", time.Since(startTime))
+			}).WithField("duration", time.Since(startTime)).WithField("x-correlation-id", cid)
 			if finalErr != nil {
 				if emitEvent && !errors.Is(finalErr, context.Canceled) {
 					span.AddEvent(events.NewWebhookFailed(ctx, finalErr, triggerID, webhookID))
@@ -369,6 +373,8 @@ func (e *WebHook) execute(ctx context.Context, data *templateContext) error {
 			return nil
 		} else if err != nil {
 			return err
+		} else {
+			builder.RenderHeadersWithTemplates(data.RequestHeaders)
 		}
 
 		if data.Identity != nil {

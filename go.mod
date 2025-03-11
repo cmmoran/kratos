@@ -14,10 +14,11 @@ replace (
 
 	github.com/gorilla/sessions => github.com/ory/sessions v1.2.2-0.20220110165800-b09c17334dc2
 	github.com/mattn/go-sqlite3 => github.com/mattn/go-sqlite3 v1.14.22
-
 	// Use the internal httpclient which can be generated in this codebase but mark it as the
 	// official SDK, allowing for the Ory CLI to consume Ory Kratos' CLI commands.
 	github.com/ory/client-go => ./internal/client-go
+
+	github.com/ory/x => github.com/cmmoran/ory-x v0.0.0-20250206122935-2dfc38cc111c
 )
 
 require (

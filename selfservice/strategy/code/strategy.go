@@ -175,9 +175,11 @@ func (s *Strategy) CountActiveMultiFactorCredentials(ctx context.Context, cc map
 
 	// Count valid addresses configured for MFA
 	validAddresses := 0
-	for _, addr := range conf.Addresses {
-		if addr.Address != "" {
-			validAddresses++
+	if !conf.Disabled {
+		for _, addr := range conf.Addresses {
+			if addr.Address != "" {
+				validAddresses++
+			}
 		}
 	}
 
@@ -365,6 +367,7 @@ func (s *Strategy) populateChooseMethodFlow(r *http.Request, f flow.Flow) error 
 	return nil
 }
 
+// populateEmailSentFlow prepares and updates the UI flow nodes and messages for email-based flows like recovery, verification, login, or registration.
 func (s *Strategy) populateEmailSentFlow(ctx context.Context, f flow.Flow) error {
 	// fresh ui node group
 	freshNodes := node.Nodes{}
@@ -374,6 +377,7 @@ func (s *Strategy) populateEmailSentFlow(ctx context.Context, f flow.Flow) error
 
 	var resendNode *node.Node
 	var backNode *node.Node
+	var trustDeviceNode *node.Node
 
 	switch f.GetFlowName() {
 	case flow.RecoveryFlow:
@@ -393,6 +397,7 @@ func (s *Strategy) populateEmailSentFlow(ctx context.Context, f flow.Flow) error
 		route = login.RouteSubmitFlow
 		codeMetaLabel = text.NewInfoNodeLabelLoginCode()
 		message = text.NewLoginCodeSent()
+		trustDeviceNode = node.NewInputField("trust_device", false, node.CodeGroup, node.InputAttributeTypeCheckbox).WithMetaLabel(text.NewInfoTrustDeviceLabel())
 
 		// preserve the login identifier that was submitted
 		// so we can retry the code flow with the same data
@@ -463,6 +468,10 @@ func (s *Strategy) populateEmailSentFlow(ctx context.Context, f flow.Flow) error
 	// code input field
 	freshNodes.Upsert(node.NewInputField("code", nil, node.CodeGroup, node.InputAttributeTypeText, node.WithRequiredInputAttribute).
 		WithMetaLabel(codeMetaLabel))
+
+	if trustDeviceNode != nil {
+		freshNodes.Upsert(trustDeviceNode)
+	}
 
 	// code submit button
 	freshNodes.

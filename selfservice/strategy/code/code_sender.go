@@ -140,7 +140,7 @@ func (s *Sender) SendCode(ctx context.Context, f flow.Flow, id *identity.Identit
 					AddressType: address.Via,
 					Address:     address.To,
 					RawCode:     rawCode,
-					ExpiresIn:   s.deps.Config().SelfServiceCodeMethodLifespan(ctx),
+					ExpiresIn:   s.deps.Config().SelfServiceCodeMethodMfaLifespan(ctx),
 					FlowID:      f.GetID(),
 					IdentityID:  id.ID,
 				})
@@ -167,7 +167,7 @@ func (s *Sender) SendCode(ctx context.Context, f flow.Flow, id *identity.Identit
 					Identity:         model,
 					RequestURL:       f.GetRequestURL(),
 					TransientPayload: transientPayload,
-					ExpiresInMinutes: int(s.deps.Config().SelfServiceCodeMethodLifespan(ctx).Minutes()),
+					ExpiresInMinutes: int(s.deps.Config().SelfServiceCodeMethodMfaLifespan(ctx).Minutes()),
 				})
 			case identity.ChannelTypeSMS:
 				t = sms.NewLoginCodeValid(s.deps, &sms.LoginCodeValidModel{
@@ -176,7 +176,7 @@ func (s *Sender) SendCode(ctx context.Context, f flow.Flow, id *identity.Identit
 					Identity:         model,
 					RequestURL:       f.GetRequestURL(),
 					TransientPayload: transientPayload,
-					ExpiresInMinutes: int(s.deps.Config().SelfServiceCodeMethodLifespan(ctx).Minutes()),
+					ExpiresInMinutes: int(s.deps.Config().SelfServiceCodeMethodMfaLifespan(ctx).Minutes()),
 				})
 			}
 

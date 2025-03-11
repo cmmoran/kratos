@@ -858,9 +858,16 @@ func (m *RegistryDefault) PrometheusManager() *prometheus.MetricsManager {
 	return m.pmm
 }
 
-func (m *RegistryDefault) HTTPClient(_ context.Context, opts ...httpx.ResilientOptions) *retryablehttp.Client {
+func (m *RegistryDefault) HTTPClient(ctx context.Context, opts ...httpx.ResilientOptions) *retryablehttp.Client {
+	l := m.Logger()
+	corrIdRaw := ctx.Value("x-correlation-id")
+	if corrIdRaw != nil {
+		if corrId := corrIdRaw.(string); corrId != "" {
+			l = l.WithField("x-correlation-id", corrId)
+		}
+	}
 	opts = append(opts,
-		httpx.ResilientClientWithLogger(m.Logger()),
+		httpx.ResilientClientWithLogger(l),
 		httpx.ResilientClientWithMaxRetry(2),
 		httpx.ResilientClientWithConnectionTimeout(30*time.Second),
 		httpx.ResilientClientWithTracer(noop.NewTracerProvider().Tracer("Ory Kratos")), // will use the tracer from a context if available
