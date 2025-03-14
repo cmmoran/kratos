@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ory/kratos/driver/config"
+
 	"github.com/ory/kratos/x"
 
 	"github.com/ory/x/httpx"
@@ -111,6 +113,16 @@ func (m *Device) SameDevice(other *Device) bool {
 		pointerx.Deref(m.Fingerprint) == pointerx.Deref(other.Fingerprint) &&
 		pointerx.Deref(m.IPAddress) == pointerx.Deref(other.IPAddress) &&
 		pointerx.Deref(m.UserAgent) == pointerx.Deref(other.UserAgent)
+}
+
+func (m *Device) DeviceTrustedFor(i identity.CredentialsType) bool {
+	for _, amr := range m.AMR {
+		if amr.Method == i {
+			return true
+		}
+	}
+
+	return false
 }
 
 // A Session
@@ -299,7 +311,7 @@ func (s *Session) AuthenticatedVia(method identity.CredentialsType) bool {
 	return false
 }
 
-func (s *Session) SetAuthenticatorAssuranceLevel() {
+func (s *Session) SetAuthenticatorAssuranceLevel(requestedAAL string) {
 	if len(s.AMR) == 0 {
 		// No AMR is set
 		s.AuthenticatorAssuranceLevel = identity.NoAuthenticatorAssuranceLevel
@@ -311,7 +323,11 @@ func (s *Session) SetAuthenticatorAssuranceLevel() {
 		case identity.AuthenticatorAssuranceLevel1:
 			isAAL1 = true
 		case identity.AuthenticatorAssuranceLevel2:
-			isAAL2 = true
+			if requestedAAL == config.DeviceTrustBasedAAL {
+				isAAL2 = true
+			} else {
+				isAAL2 = !amr.DeviceTrustBased
+			}
 		// The following section is a graceful migration from Ory Kratos v0.9.
 		//
 		// TODO remove this section, it is already over 2 years old.

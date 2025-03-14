@@ -33,7 +33,11 @@ const (
 	InfoSelfServiceLoginPasskey                                  // 1010021
 	InfoSelfServiceLoginPassword                                 // 1010022
 	InfoSelfServiceLoginAAL2CodeAddress                          // 1010023
-	InfoSelfServiceLoginTrustDeviceLabel                         // 1010024
+)
+
+const (
+	InfoSelfServiceLoginTrustDeviceLabel ID = 91010000 + iota
+	InfoSelfServiceLoginLookupCodesAlmostDepleted
 )
 
 const (
@@ -79,7 +83,10 @@ const (
 	InfoSelfServiceSettingsRemoveWebAuthn
 	InfoSelfServiceSettingsRegisterPasskey
 	InfoSelfServiceSettingsRemovePasskey
-	InfoSelfServiceSettingsEnableMethod
+)
+
+const (
+	InfoSelfServiceSettingsEnableMethod ID = 91050000 + iota
 )
 
 const (

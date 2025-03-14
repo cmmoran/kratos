@@ -241,12 +241,10 @@ preLoginHook:
 		}
 	}
 
-	if f.Refresh {
-		f.UI.Messages.Set(text.NewInfoLoginReAuth())
-	}
-
 	if sess != nil && f.RequestedAAL > sess.AuthenticatorAssuranceLevel && f.RequestedAAL > identity.AuthenticatorAssuranceLevel1 {
 		f.UI.Messages.Add(text.NewInfoLoginMFA())
+	} else if f.Refresh {
+		f.UI.Messages.Set(text.NewInfoLoginReAuth())
 	}
 
 	if err := sortNodes(r.Context(), f.UI.Nodes); err != nil {

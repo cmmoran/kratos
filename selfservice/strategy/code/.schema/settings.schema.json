@@ -9,6 +9,9 @@
     "code_disable": {
       "type": "boolean"
     },
+    "code_device_untrust": {
+      "type": "string"
+    },
     "csrf_token": {
       "type": "string"
     },

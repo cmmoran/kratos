@@ -397,7 +397,10 @@ func (s *Strategy) populateEmailSentFlow(ctx context.Context, f flow.Flow) error
 		route = login.RouteSubmitFlow
 		codeMetaLabel = text.NewInfoNodeLabelLoginCode()
 		message = text.NewLoginCodeSent()
-		trustDeviceNode = node.NewInputField("trust_device", false, node.CodeGroup, node.InputAttributeTypeCheckbox).WithMetaLabel(text.NewInfoTrustDeviceLabel())
+		f.(*login.Flow).SetReturnTo()
+		if !strings.HasSuffix(f.(*login.Flow).ReturnTo, "/settings") {
+			trustDeviceNode = node.NewInputField("trust_device", false, node.CodeGroup, node.InputAttributeTypeCheckbox).WithMetaLabel(text.NewInfoTrustDeviceLabel())
+		}
 
 		// preserve the login identifier that was submitted
 		// so we can retry the code flow with the same data
@@ -487,6 +490,10 @@ func (s *Strategy) populateEmailSentFlow(ctx context.Context, f flow.Flow) error
 	}
 
 	f.GetUI().Nodes = freshNodes
+
+	if err := sortNodes(ctx, f.GetUI().Nodes); err != nil {
+		return err
+	}
 
 	f.GetUI().Method = "POST"
 	f.GetUI().Action = flow.AppendFlowTo(urlx.AppendPaths(s.deps.Config().SelfPublicURL(ctx), route), f.GetID()).String()

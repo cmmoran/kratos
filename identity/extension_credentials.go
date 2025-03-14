@@ -6,12 +6,14 @@ package identity
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/ory/kratos/x"
-	"github.com/pkg/errors"
-	"github.com/samber/lo"
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/pkg/errors"
+	"github.com/samber/lo"
+
+	"github.com/ory/kratos/x"
 
 	"github.com/ory/jsonschema/v3"
 	"github.com/ory/kratos/schema"
@@ -73,7 +75,7 @@ func (r *SchemaExtensionCredentials) Run(ctx jsonschema.ValidationContext, s sch
 		cred := r.i.GetCredentialsOr(CredentialsTypeCodeAuth, &Credentials{
 			Type:        CredentialsTypeCodeAuth,
 			Identifiers: []string{},
-			Config:      sqlxx.JSONRawMessage("{}"),
+			Config:      sqlxx.JSONRawMessage(`{"disabled": true}`),
 			Version:     1,
 		})
 
@@ -82,48 +84,46 @@ func (r *SchemaExtensionCredentials) Run(ctx jsonschema.ValidationContext, s sch
 		if err != nil {
 			conf = CredentialsCode{}
 		}
-		if !conf.Disabled {
-			conf.Addresses = r.addresses
-			value, err := x.NormalizeIdentifier(fmt.Sprintf("%s", value), string(via))
-			if err != nil {
-				return &jsonschema.ValidationError{Message: err.Error()}
-			}
-
-			conf.Addresses = append(conf.Addresses, CredentialsCodeAddress{
-				Channel: via,
-				Address: value,
-			})
-
-			conf.Addresses = lo.UniqBy(conf.Addresses, func(item CredentialsCodeAddress) string {
-				return fmt.Sprintf("%x:%s", item.Address, item.Channel)
-			})
-
-			sort.SliceStable(conf.Addresses, func(i, j int) bool {
-				if conf.Addresses[i].Address == conf.Addresses[j].Address {
-					return conf.Addresses[i].Channel < conf.Addresses[j].Channel
-				}
-				return conf.Addresses[i].Address < conf.Addresses[j].Address
-			})
-
-			if r.v == nil {
-				r.v = make(map[CredentialsType][]string)
-			}
-
-			r.v[CredentialsTypeCodeAuth] = stringslice.Unique(append(r.v[CredentialsTypeCodeAuth],
-				lo.Map(conf.Addresses, func(item CredentialsCodeAddress, _ int) string {
-					return item.Address
-				})...,
-			))
-			r.addresses = conf.Addresses
-
-			cred.Identifiers = r.v[CredentialsTypeCodeAuth]
-			cred.Config, err = json.Marshal(conf)
-			if err != nil {
-				return errors.WithStack(err)
-			}
-
-			r.i.SetCredentials(CredentialsTypeCodeAuth, *cred)
+		conf.Addresses = r.addresses
+		value, err := x.NormalizeIdentifier(fmt.Sprintf("%s", value), string(via))
+		if err != nil {
+			return &jsonschema.ValidationError{Message: err.Error()}
 		}
+
+		conf.Addresses = append(conf.Addresses, CredentialsCodeAddress{
+			Channel: via,
+			Address: value,
+		})
+
+		conf.Addresses = lo.UniqBy(conf.Addresses, func(item CredentialsCodeAddress) string {
+			return fmt.Sprintf("%x:%s", item.Address, item.Channel)
+		})
+
+		sort.SliceStable(conf.Addresses, func(i, j int) bool {
+			if conf.Addresses[i].Address == conf.Addresses[j].Address {
+				return conf.Addresses[i].Channel < conf.Addresses[j].Channel
+			}
+			return conf.Addresses[i].Address < conf.Addresses[j].Address
+		})
+
+		if r.v == nil {
+			r.v = make(map[CredentialsType][]string)
+		}
+
+		r.v[CredentialsTypeCodeAuth] = stringslice.Unique(append(r.v[CredentialsTypeCodeAuth],
+			lo.Map(conf.Addresses, func(item CredentialsCodeAddress, _ int) string {
+				return item.Address
+			})...,
+		))
+		r.addresses = conf.Addresses
+
+		cred.Identifiers = r.v[CredentialsTypeCodeAuth]
+		cred.Config, err = json.Marshal(conf)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		r.i.SetCredentials(CredentialsTypeCodeAuth, *cred)
 	}
 
 	return nil

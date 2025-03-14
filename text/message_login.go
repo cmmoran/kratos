@@ -39,11 +39,23 @@ func NewInfoLoginTOTPLabel() *Message {
 		Text: "Authentication code",
 	}
 }
+
 func NewInfoTrustDeviceLabel() *Message {
 	return &Message{
 		ID:   InfoSelfServiceLoginTrustDeviceLabel,
 		Type: Info,
 		Text: "Trust this device",
+	}
+}
+
+func NewInfoSelfServiceLoginLookupCodesAlmostDepleted(count int) *Message {
+	return &Message{
+		ID:   InfoSelfServiceLoginLookupCodesAlmostDepleted,
+		Type: Info,
+		Text: "Backup recovery codes remaining: {count}. Please generate a new set of codes.",
+		Context: context(map[string]any{
+			"count": count,
+		}),
 	}
 }
 

@@ -21,6 +21,7 @@ var _ MappedNullable = &IdentityCredentialsCode{}
 // IdentityCredentialsCode CredentialsCode represents a one time login/registration code
 type IdentityCredentialsCode struct {
 	Addresses            []IdentityCredentialsCodeAddress `json:"addresses,omitempty"`
+	Disabled             *bool                            `json:"disabled,omitempty"`
 	AdditionalProperties map[string]interface{}
 }
 
@@ -75,6 +76,38 @@ func (o *IdentityCredentialsCode) SetAddresses(v []IdentityCredentialsCodeAddres
 	o.Addresses = v
 }
 
+// GetDisabled returns the Disabled field value if set, zero value otherwise.
+func (o *IdentityCredentialsCode) GetDisabled() bool {
+	if o == nil || IsNil(o.Disabled) {
+		var ret bool
+		return ret
+	}
+	return *o.Disabled
+}
+
+// GetDisabledOk returns a tuple with the Disabled field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *IdentityCredentialsCode) GetDisabledOk() (*bool, bool) {
+	if o == nil || IsNil(o.Disabled) {
+		return nil, false
+	}
+	return o.Disabled, true
+}
+
+// HasDisabled returns a boolean if a field has been set.
+func (o *IdentityCredentialsCode) HasDisabled() bool {
+	if o != nil && !IsNil(o.Disabled) {
+		return true
+	}
+
+	return false
+}
+
+// SetDisabled gets a reference to the given bool and assigns it to the Disabled field.
+func (o *IdentityCredentialsCode) SetDisabled(v bool) {
+	o.Disabled = &v
+}
+
 func (o IdentityCredentialsCode) MarshalJSON() ([]byte, error) {
 	toSerialize, err := o.ToMap()
 	if err != nil {
@@ -87,6 +120,9 @@ func (o IdentityCredentialsCode) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
 	if !IsNil(o.Addresses) {
 		toSerialize["addresses"] = o.Addresses
+	}
+	if !IsNil(o.Disabled) {
+		toSerialize["disabled"] = o.Disabled
 	}
 
 	for key, value := range o.AdditionalProperties {
@@ -111,6 +147,7 @@ func (o *IdentityCredentialsCode) UnmarshalJSON(data []byte) (err error) {
 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
 		delete(additionalProperties, "addresses")
+		delete(additionalProperties, "disabled")
 		o.AdditionalProperties = additionalProperties
 	}
 

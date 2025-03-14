@@ -48,3 +48,8 @@ const (
 	CodeEnable  = "code_enable"
 	CodeDisable = "code_disable"
 )
+
+const (
+	TOTPDeviceUntrust = "totp_device_untrust"
+	CodeDeviceUntrust = "code_device_untrust"
+)

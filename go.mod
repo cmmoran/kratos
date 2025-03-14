@@ -18,7 +18,7 @@ replace (
 	// official SDK, allowing for the Ory CLI to consume Ory Kratos' CLI commands.
 	github.com/ory/client-go => ./internal/client-go
 
-	github.com/ory/x => github.com/cmmoran/ory-x v0.0.0-20250206122935-2dfc38cc111c
+	github.com/ory/x => github.com/cmmoran/ory-x v0.0.0-20250313154406-a884b6a0b910
 )
 
 require (

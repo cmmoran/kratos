@@ -21,12 +21,16 @@ var _ MappedNullable = &SessionDevice{}
 
 // SessionDevice Device corresponding to a Session
 type SessionDevice struct {
+	// A list of authenticators which were used to authenticate the session.
+	AuthenticationMethods []SessionAuthenticationMethod `json:"authentication_methods,omitempty"`
 	// Device record ID
 	Id string `json:"id"`
 	// IPAddress of the client
 	IpAddress *string `json:"ip_address,omitempty"`
 	// Geo Location corresponding to the IP Address
 	Location *string `json:"location,omitempty"`
+	// Is this device trusted? (only matters if this device submitted aal2+ credentials)
+	Trusted *bool `json:"trusted,omitempty"`
 	// UserAgent of the client
 	UserAgent            *string `json:"user_agent,omitempty"`
 	AdditionalProperties map[string]interface{}
@@ -50,6 +54,38 @@ func NewSessionDevice(id string) *SessionDevice {
 func NewSessionDeviceWithDefaults() *SessionDevice {
 	this := SessionDevice{}
 	return &this
+}
+
+// GetAuthenticationMethods returns the AuthenticationMethods field value if set, zero value otherwise.
+func (o *SessionDevice) GetAuthenticationMethods() []SessionAuthenticationMethod {
+	if o == nil || IsNil(o.AuthenticationMethods) {
+		var ret []SessionAuthenticationMethod
+		return ret
+	}
+	return o.AuthenticationMethods
+}
+
+// GetAuthenticationMethodsOk returns a tuple with the AuthenticationMethods field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *SessionDevice) GetAuthenticationMethodsOk() ([]SessionAuthenticationMethod, bool) {
+	if o == nil || IsNil(o.AuthenticationMethods) {
+		return nil, false
+	}
+	return o.AuthenticationMethods, true
+}
+
+// HasAuthenticationMethods returns a boolean if a field has been set.
+func (o *SessionDevice) HasAuthenticationMethods() bool {
+	if o != nil && !IsNil(o.AuthenticationMethods) {
+		return true
+	}
+
+	return false
+}
+
+// SetAuthenticationMethods gets a reference to the given []SessionAuthenticationMethod and assigns it to the AuthenticationMethods field.
+func (o *SessionDevice) SetAuthenticationMethods(v []SessionAuthenticationMethod) {
+	o.AuthenticationMethods = v
 }
 
 // GetId returns the Id field value
@@ -140,6 +176,38 @@ func (o *SessionDevice) SetLocation(v string) {
 	o.Location = &v
 }
 
+// GetTrusted returns the Trusted field value if set, zero value otherwise.
+func (o *SessionDevice) GetTrusted() bool {
+	if o == nil || IsNil(o.Trusted) {
+		var ret bool
+		return ret
+	}
+	return *o.Trusted
+}
+
+// GetTrustedOk returns a tuple with the Trusted field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *SessionDevice) GetTrustedOk() (*bool, bool) {
+	if o == nil || IsNil(o.Trusted) {
+		return nil, false
+	}
+	return o.Trusted, true
+}
+
+// HasTrusted returns a boolean if a field has been set.
+func (o *SessionDevice) HasTrusted() bool {
+	if o != nil && !IsNil(o.Trusted) {
+		return true
+	}
+
+	return false
+}
+
+// SetTrusted gets a reference to the given bool and assigns it to the Trusted field.
+func (o *SessionDevice) SetTrusted(v bool) {
+	o.Trusted = &v
+}
+
 // GetUserAgent returns the UserAgent field value if set, zero value otherwise.
 func (o *SessionDevice) GetUserAgent() string {
 	if o == nil || IsNil(o.UserAgent) {
@@ -182,12 +250,18 @@ func (o SessionDevice) MarshalJSON() ([]byte, error) {
 
 func (o SessionDevice) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
+	if !IsNil(o.AuthenticationMethods) {
+		toSerialize["authentication_methods"] = o.AuthenticationMethods
+	}
 	toSerialize["id"] = o.Id
 	if !IsNil(o.IpAddress) {
 		toSerialize["ip_address"] = o.IpAddress
 	}
 	if !IsNil(o.Location) {
 		toSerialize["location"] = o.Location
+	}
+	if !IsNil(o.Trusted) {
+		toSerialize["trusted"] = o.Trusted
 	}
 	if !IsNil(o.UserAgent) {
 		toSerialize["user_agent"] = o.UserAgent
@@ -235,9 +309,11 @@ func (o *SessionDevice) UnmarshalJSON(data []byte) (err error) {
 	additionalProperties := make(map[string]interface{})
 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
+		delete(additionalProperties, "authentication_methods")
 		delete(additionalProperties, "id")
 		delete(additionalProperties, "ip_address")
 		delete(additionalProperties, "location")
+		delete(additionalProperties, "trusted")
 		delete(additionalProperties, "user_agent")
 		o.AdditionalProperties = additionalProperties
 	}

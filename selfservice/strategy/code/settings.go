@@ -1,9 +1,19 @@
+// Copyright © 2025 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package code
 
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"time"
+
 	"github.com/gofrs/uuid"
+	"github.com/pkg/errors"
+	"github.com/tidwall/gjson"
+	"go.opentelemetry.io/otel/attribute"
+
 	"github.com/ory/herodot"
 	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/selfservice/flow"
@@ -14,11 +24,6 @@ import (
 	"github.com/ory/kratos/x"
 	"github.com/ory/x/decoderx"
 	"github.com/ory/x/otelx"
-	"github.com/pkg/errors"
-	"github.com/tidwall/gjson"
-	"go.opentelemetry.io/otel/attribute"
-	"net/http"
-	"time"
 )
 
 // Update Settings Flow with Lookup Method
@@ -30,6 +35,9 @@ type updateSettingsFlowWithCodeMethod struct {
 
 	// CodeEnable if set to true will disable the code credential method
 	CodeDisable bool `json:"code_disable"`
+
+	// DeviceUntrust if set, will untrust this device id for this aal2 method for this account
+	DeviceUntrust string `json:"code_device_untrust"`
 
 	// CSRFToken is the anti-CSRF token
 	CSRFToken string `json:"csrf_token"`
@@ -78,8 +86,17 @@ func (s *Strategy) PopulateSettingsMethod(ctx context.Context, r *http.Request, 
 		return err
 	}
 	if hasCode {
-		s.deps.Audit().WithField("has_code", hasCode).Info("code credentials found")
+		s.deps.Audit().WithField("has_code", hasCode).Info("code credentials enabled for account")
+		var devices []session.Device
+		devices, err = s.deps.SessionPersister().ListTrustedDevicesByIdentityWithExpiration(ctx, i.ID, s.deps.Config().SecurityTrustDeviceDuration(ctx))
+		if err != nil {
+			return err
+		}
+		deviceNode := NewTrustedDevicesCodeNode(devices)
 		f.UI.Nodes.Append(node.NewInputField(node.CodeDisable, "true", node.CodeGroup, node.InputAttributeTypeSubmit, node.WithRequiredInputAttribute).WithMetaLabel(text.NewInfoSelfServiceSettingsDisableLookup()))
+		if deviceNode != nil {
+			f.UI.Nodes.Upsert(deviceNode)
+		}
 	} else {
 		s.deps.Audit().WithField("has_code", hasCode).Info("code credentials missing")
 		f.UI.Nodes.Append(node.NewInputField(node.CodeEnable, "true", node.CodeGroup, node.InputAttributeTypeSubmit, node.WithRequiredInputAttribute).WithMetaLabel(text.NewInfoSelfServiceSettingsEnableMethod()))
@@ -104,8 +121,7 @@ func (s *Strategy) Settings(ctx context.Context, w http.ResponseWriter, r *http.
 		return ctxUpdate, s.handleSettingsError(w, r, ctxUpdate, p, err)
 	}
 
-	if p.CodeEnable || p.CodeDisable {
-		// This method has only two submit buttons
+	if p.CodeEnable || p.CodeDisable || len(p.DeviceUntrust) > 0 {
 		p.Method = s.SettingsStrategyID()
 		if err := flow.MethodEnabledAndAllowed(ctx, f.GetFlowName(), s.SettingsStrategyID(), p.Method, s.deps); err != nil {
 			return nil, s.handleSettingsError(w, r, ctxUpdate, p, err)
@@ -126,7 +142,7 @@ func (s *Strategy) Settings(ctx context.Context, w http.ResponseWriter, r *http.
 }
 
 func (s *Strategy) continueSettingsFlow(ctx context.Context, r *http.Request, ctxUpdate *settings.UpdateContext, p updateSettingsFlowWithCodeMethod) error {
-	if p.CodeEnable || p.CodeDisable {
+	if p.CodeEnable || p.CodeDisable || len(p.DeviceUntrust) > 0 {
 		if err := flow.MethodEnabledAndAllowed(ctx, flow.SettingsFlow, s.SettingsStrategyID(), s.SettingsStrategyID(), s.deps); err != nil {
 			return err
 		}
@@ -146,17 +162,62 @@ func (s *Strategy) continueSettingsFlow(ctx context.Context, r *http.Request, ct
 		i   *identity.Identity
 		err error
 	)
-	if p.CodeEnable {
+	if len(p.DeviceUntrust) > 0 {
+		i, err = s.continueSettingsFlowDeviceUntrust(ctx, ctxUpdate, p)
+		s.deps.Audit().WithField("code_device_untrust", p.DeviceUntrust).WithField("identity", ctxUpdate.Session.Identity.ID.String()).Info("untrusting device code code mfa")
+	} else if p.CodeEnable {
 		i, err = s.continueSettingsFlowEnable(ctx, ctxUpdate, p)
 		s.deps.Audit().WithField("code_enable", p.CodeEnable).WithField("identity", ctxUpdate.Session.Identity.ID.String()).Info("code credentials should be enabled")
 	} else if p.CodeDisable {
 		i, err = s.continueSettingsFlowDisable(ctx, ctxUpdate, p)
-		s.deps.Audit().WithField("code_disable", p.CodeDisable).WithField("identity", ctxUpdate.Session.Identity.ID.String()).Info("code credentials should be deleted")
+		s.deps.Audit().WithField("code_disable", p.CodeDisable).WithField("identity", ctxUpdate.Session.Identity.ID.String()).Info("code credentials should be disabled")
 	}
 
 	ctxUpdate.UpdateIdentity(i)
 
 	return err
+}
+
+func (s *Strategy) continueSettingsFlowDeviceUntrust(ctx context.Context, ctxUpdate *settings.UpdateContext, p updateSettingsFlowWithCodeMethod) (*identity.Identity, error) {
+	s.deps.Audit().WithField("code_device_untrust", p.DeviceUntrust).WithField("identity", ctxUpdate.Session.Identity.ID.String()).Info("untrusting code mfa device for account")
+
+	i, err := s.deps.PrivilegedIdentityPool().GetIdentityConfidential(ctx, ctxUpdate.Session.Identity.ID)
+	if err != nil {
+		return nil, err
+	}
+	devId := uuid.FromStringOrNil(p.DeviceUntrust)
+	if devId == uuid.Nil {
+		return nil, errors.WithStack(errors.New("invalid device id"))
+	}
+
+	var devices []session.Device
+	devices, err = s.deps.SessionPersister().ListTrustedDevicesByIdentity(ctx, i.ID)
+	if err != nil {
+		return nil, err
+	}
+	for idx, d := range devices {
+		if d.ID == devId {
+			devices[idx].Trusted = false
+			if err = s.deps.SessionPersister().UpsertDevice(ctx, &(devices[idx])); err != nil {
+				return nil, err
+			}
+		}
+	}
+	deviceNode := NewTrustedDevicesCodeNode(devices)
+	ctxUpdate.Flow.UI.Nodes.Upsert(node.NewInputField(node.CodeDisable, "true", node.CodeGroup, node.InputAttributeTypeSubmit, node.WithRequiredInputAttribute).WithMetaLabel(text.NewInfoSelfServiceSettingsDisableLookup()))
+	if deviceNode != nil {
+		ctxUpdate.Flow.UI.Nodes.Upsert(deviceNode)
+	}
+
+	ctxUpdate.UpdateIdentity(i)
+
+	if err = s.deps.SettingsFlowPersister().UpdateSettingsFlow(ctx, ctxUpdate.Flow); err != nil {
+		return nil, err
+	}
+
+	s.deps.Audit().Info("finished continueSettingsFlowCodeUntrustDevice")
+
+	return i, nil
 }
 
 func (s *Strategy) continueSettingsFlowEnable(ctx context.Context, ctxUpdate *settings.UpdateContext, p updateSettingsFlowWithCodeMethod) (*identity.Identity, error) {
@@ -184,6 +245,13 @@ func (s *Strategy) continueSettingsFlowEnable(ctx context.Context, ctxUpdate *se
 			return i, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to marshal credentials config: %s", err))
 		}
 		i.SetCredentials(identity.CredentialsTypeCodeAuth, *creds)
+		// Since we added the method, it also means that we have authenticated it
+		if err = s.deps.SessionManager().SessionAddAuthenticationMethods(ctx, ctxUpdate.Session.ID, session.AuthenticationMethod{
+			Method: s.ID(),
+			AAL:    identity.AuthenticatorAssuranceLevel2,
+		}); err != nil {
+			return nil, err
+		}
 	}
 
 	ctxUpdate.UpdateIdentity(i)
@@ -222,6 +290,17 @@ func (s *Strategy) continueSettingsFlowDisable(ctx context.Context, ctxUpdate *s
 			return i, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to marshal credentials config: %s", err))
 		}
 		i.SetCredentials(identity.CredentialsTypeCodeAuth, *creds)
+
+		if devices, derr := s.deps.SessionPersister().ListTrustedDevicesByIdentity(ctx, ctxUpdate.Session.Identity.ID); derr == nil {
+			for idx, d := range devices {
+				if d.Trusted && d.DeviceTrustedFor(s.ID()) {
+					devices[idx].Trusted = false
+					if err = s.deps.SessionPersister().UpsertDevice(ctx, &(devices[idx])); err != nil {
+						return nil, err
+					}
+				}
+			}
+		}
 	}
 
 	ctxUpdate.UpdateIdentity(i)

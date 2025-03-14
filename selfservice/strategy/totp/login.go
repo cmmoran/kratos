@@ -6,6 +6,7 @@ package totp
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -59,7 +60,12 @@ func (s *Strategy) PopulateLoginMethod(r *http.Request, requestedAAL identity.Au
 
 	sr.UI.SetCSRF(s.d.GenerateCSRFToken(r))
 	sr.UI.SetNode(node.NewInputField("totp_code", "", node.TOTPGroup, node.InputAttributeTypeText, node.WithRequiredInputAttribute).WithMetaLabel(text.NewInfoLoginTOTPLabel()))
-	sr.UI.SetNode(node.NewInputField("trust_device", false, node.TOTPGroup, node.InputAttributeTypeCheckbox).WithMetaLabel(text.NewInfoTrustDeviceLabel()))
+	// if the return_to is <host>/settings, do _not_ add 'trust_device'
+	sr.SetReturnTo()
+	if !strings.HasSuffix(sr.ReturnTo, "/settings") {
+		s.d.Audit().WithRequest(r).WithField("return_to", sr.ReturnTo).Debug("adding trust_device to login flow")
+		sr.UI.SetNode(node.NewInputField("trust_device", false, node.TOTPGroup, node.InputAttributeTypeCheckbox).WithMetaLabel(text.NewInfoTrustDeviceLabel()))
+	}
 	sr.UI.GetNodes().Append(node.NewInputField("method", s.ID(), node.TOTPGroup, node.InputAttributeTypeSubmit).WithMetaLabel(text.NewInfoLoginTOTP()))
 
 	return nil
@@ -68,6 +74,7 @@ func (s *Strategy) PopulateLoginMethod(r *http.Request, requestedAAL identity.Au
 func (s *Strategy) handleLoginError(r *http.Request, f *login.Flow, err error) error {
 	if f != nil {
 		f.UI.Nodes.ResetNodes("totp_code")
+		f.UI.Nodes.ResetNodes("trust_device")
 		if f.Type == flow.TypeBrowser {
 			f.UI.SetCSRF(s.d.GenerateCSRFToken(r))
 		}

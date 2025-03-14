@@ -56,6 +56,9 @@ type updateSettingsFlowWithTotpMethod struct {
 	// to set up a new TOTP device.
 	UnlinkTOTP bool `json:"totp_unlink"`
 
+	// DeviceUntrust if true, will untrust this device id for this aal2 method for this account
+	DeviceUntrust string `json:"totp_device_untrust"`
+
 	// CSRFToken is the anti-CSRF token
 	CSRFToken string `json:"csrf_token"`
 
@@ -101,7 +104,7 @@ func (s *Strategy) Settings(ctx context.Context, w http.ResponseWriter, r *http.
 		return ctxUpdate, s.handleSettingsError(ctx, w, r, ctxUpdate, p, err)
 	}
 
-	if p.UnlinkTOTP {
+	if p.UnlinkTOTP || len(p.DeviceUntrust) > 0 {
 		// This is a submit so we need to manually set the type to TOTP
 		p.Method = s.SettingsStrategyID()
 		if err := flow.MethodEnabledAndAllowed(ctx, f.GetFlowName(), s.SettingsStrategyID(), p.Method, s.d); err != nil {
@@ -152,12 +155,15 @@ func (s *Strategy) continueSettingsFlow(ctx context.Context, r *http.Request, ct
 		return err
 	}
 
-	// We have now two cases:
+	// We have now three cases:
 	//
-	// 1. TOTP should be removed -> we have it already
-	// 2. TOTP should be added -> we do not have it yet
+	// 1. Untrust device trusted for TOTP mfa
+	// 2. TOTP should be removed -> we have it already
+	// 3. TOTP should be added -> we do not have it yet
 	var i *identity.Identity
-	if hasTOTP {
+	if len(p.DeviceUntrust) > 0 {
+		i, err = s.continueSettingsFlowUntrustDevice(ctx, ctxUpdate, p)
+	} else if hasTOTP {
 		i, err = s.continueSettingsFlowRemoveTOTP(ctx, ctxUpdate, p)
 	} else {
 		i, err = s.continueSettingsFlowAddTOTP(ctx, ctxUpdate, p)
@@ -171,6 +177,47 @@ func (s *Strategy) continueSettingsFlow(ctx context.Context, r *http.Request, ct
 	return nil
 }
 
+func (s *Strategy) continueSettingsFlowUntrustDevice(ctx context.Context, ctxUpdate *settings.UpdateContext, p updateSettingsFlowWithTotpMethod) (*identity.Identity, error) {
+	s.d.Audit().WithField("totp_device_untrust", p.DeviceUntrust).WithField("identity", ctxUpdate.Session.Identity.ID.String()).Info("untrusting totp mfa device for account")
+
+	i, err := s.d.PrivilegedIdentityPool().GetIdentityConfidential(ctx, ctxUpdate.Session.Identity.ID)
+	if err != nil {
+		return nil, err
+	}
+	devId := uuid.FromStringOrNil(p.DeviceUntrust)
+	if devId == uuid.Nil {
+		return nil, errors.WithStack(errors.New("invalid device id"))
+	}
+
+	var devices []session.Device
+	devices, err = s.d.SessionPersister().ListTrustedDevicesByIdentity(ctx, i.ID)
+	if err != nil {
+		return nil, err
+	}
+	for idx, d := range devices {
+		if d.ID == devId {
+			devices[idx].Trusted = false
+			if err = s.d.SessionPersister().UpsertDevice(ctx, &(devices[idx])); err != nil {
+				return nil, err
+			}
+		}
+	}
+	deviceNode := NewTrustedDevicesTOTPNode(devices)
+	ctxUpdate.Flow.UI.Nodes.Upsert(NewUnlinkTOTPNode())
+	if deviceNode != nil {
+		ctxUpdate.Flow.UI.Nodes.Upsert(deviceNode)
+	}
+
+	ctxUpdate.UpdateIdentity(i)
+
+	if err = s.d.SettingsFlowPersister().UpdateSettingsFlow(ctx, ctxUpdate.Flow); err != nil {
+		return nil, err
+	}
+
+	s.d.Audit().Info("finished continueSettingsFlowTotpUntrustDevice")
+
+	return i, nil
+}
 func (s *Strategy) continueSettingsFlowAddTOTP(ctx context.Context, ctxUpdate *settings.UpdateContext, p updateSettingsFlowWithTotpMethod) (*identity.Identity, error) {
 	keyURL := gjson.GetBytes(ctxUpdate.Flow.InternalContext, flow.PrefixInternalContextKey(s.ID(), InternalContextKeyURL)).String()
 	if len(keyURL) == 0 {
@@ -241,6 +288,16 @@ func (s *Strategy) continueSettingsFlowRemoveTOTP(ctx context.Context, ctxUpdate
 	}
 
 	i.DeleteCredentialsType(identity.CredentialsTypeTOTP)
+	if devices, derr := s.d.SessionPersister().ListTrustedDevicesByIdentity(ctx, ctxUpdate.Session.Identity.ID); derr == nil {
+		for idx, d := range devices {
+			if d.Trusted && d.DeviceTrustedFor(s.ID()) {
+				devices[idx].Trusted = false
+				if err = s.d.SessionPersister().UpsertDevice(ctx, &devices[idx]); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
 	return i, nil
 }
 
@@ -271,8 +328,18 @@ func (s *Strategy) PopulateSettingsMethod(ctx context.Context, r *http.Request, 
 	}
 
 	// OTP already set up, just add an unlink option
+	// ... and list of currently trusted devices for totp
 	if hasTOTP {
+		var devices []session.Device
+		devices, err = s.d.SessionPersister().ListTrustedDevicesByIdentityWithExpiration(ctx, id.ID, s.d.Config().SecurityTrustDeviceDuration(ctx))
+		if err != nil {
+			return err
+		}
+		deviceNode := NewTrustedDevicesTOTPNode(devices)
 		f.UI.Nodes.Upsert(NewUnlinkTOTPNode())
+		if deviceNode != nil {
+			f.UI.Nodes.Upsert(deviceNode)
+		}
 	} else {
 		e := NewSchemaExtension(id.ID.String())
 		_ = s.d.IdentityValidator().ValidateWithRunner(ctx, id, e)

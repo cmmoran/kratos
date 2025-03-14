@@ -4528,6 +4528,9 @@
           "items": {
             "$ref": "#/definitions/identityCredentialsCodeAddress"
           }
+        },
+        "disabled": {
+          "type": "boolean"
         }
       }
     },
@@ -6779,6 +6782,39 @@
       "description": "Update Settings Flow Request Body",
       "type": "object"
     },
+    "updateSettingsFlowWithCodeMethod": {
+      "description": "Update Settings Flow with Lookup Method",
+      "type": "object",
+      "required": [
+        "method"
+      ],
+      "properties": {
+        "code_device_untrust": {
+          "description": "DeviceUntrust if set, will untrust this device id for this aal2 method for this account",
+          "type": "string"
+        },
+        "code_disable": {
+          "description": "CodeEnable if set to true will disable the code credential method",
+          "type": "boolean"
+        },
+        "code_enable": {
+          "description": "CodeEnable if set to true will enable the code credential method",
+          "type": "boolean"
+        },
+        "csrf_token": {
+          "description": "CSRFToken is the anti-CSRF token",
+          "type": "string"
+        },
+        "method": {
+          "description": "Method\n\nShould be set to \"code\" when trying to enable or disable the credential method.",
+          "type": "string"
+        },
+        "transient_payload": {
+          "description": "Transient data to pass along to any webhooks",
+          "type": "object"
+        }
+      }
+    },
     "updateSettingsFlowWithLookupMethod": {
       "description": "Update Settings Flow with Lookup Method",
       "type": "object",
@@ -6980,6 +7016,10 @@
         },
         "totp_code": {
           "description": "ValidationTOTP must contain a valid TOTP based on the",
+          "type": "string"
+        },
+        "totp_device_untrust": {
+          "description": "DeviceUntrust if true, will untrust this device id for this aal2 method for this account",
           "type": "string"
         },
         "totp_unlink": {
