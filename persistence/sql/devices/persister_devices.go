@@ -5,9 +5,10 @@ package devices
 
 import (
 	"context"
-
 	"github.com/gobuffalo/pop/v6"
 	"github.com/gofrs/uuid"
+	"slices"
+	"time"
 
 	"github.com/ory/kratos/session"
 	"github.com/ory/x/contextx"
@@ -76,4 +77,26 @@ func (p *DevicePersister) ListTrustedDevicesByIdentity(ctx context.Context, iID 
 	}
 
 	return std, nil
+}
+
+func (p *DevicePersister) ListTrustedDevicesByIdentityWithExpiration(ctx context.Context, iID uuid.UUID, deviceTrustDuration time.Duration) (devices []session.Device, err error) {
+	devices, err = p.ListTrustedDevicesByIdentity(ctx, iID)
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+	slices.DeleteFunc(devices, func(device session.Device) bool {
+		if device.Trusted && len(device.AMR) > 0 {
+			for _, amr := range device.AMR {
+				if now.After(amr.CompletedAt.Add(deviceTrustDuration)) {
+					return true
+				}
+			}
+			return false
+		}
+		return true
+	})
+
+	return devices, nil
 }

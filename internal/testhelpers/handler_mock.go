@@ -143,7 +143,7 @@ func MockSessionCreateHandlerWithIdentityAndAMR(t *testing.T, reg mockDeps, i *i
 	for _, method := range methods {
 		sess.CompletedLoginFor(method, "")
 	}
-	sess.SetAuthenticatorAssuranceLevel()
+	sess.SetAuthenticatorAssuranceLevel("")
 
 	ctx := context.Background()
 	if _, err := reg.Config().DefaultIdentityTraitsSchemaURL(ctx); err != nil {

@@ -263,9 +263,13 @@ func (n Nodes) SortBySchema(ctx context.Context, opts ...SortOption) error {
 		if node.Attributes.ID() == "method" {
 			return len(n) + len(o.keysInOrder) + 1
 		}
+		// Just kidding, if resend exists, it must be the last element in the list
+		if node.Attributes.ID() == "resend" {
+			return len(n) + len(o.keysInOrder) + 1
+		}
 
-		for i, n := range o.keysInOrder {
-			if strings.HasPrefix(node.ID(), n) {
+		for i, keyn := range o.keysInOrder {
+			if strings.HasPrefix(node.ID(), keyn) {
 				return i
 			}
 		}
@@ -454,6 +458,9 @@ func (n *Node) MarshalJSON() ([]byte, error) {
 		case *ScriptAttributes:
 			t = Script
 			attr.NodeType = Script
+		case *DivisionAttributes:
+			t = Division
+			attr.NodeType = Division
 		default:
 			return nil, errors.WithStack(fmt.Errorf("unknown node type: %T", n.Attributes))
 		}
