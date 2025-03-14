@@ -78,4 +78,5 @@ type DevicePersister interface {
 	CreateDevice(ctx context.Context, d *Device) error
 	UpsertDevice(ctx context.Context, d *Device) error
 	ListTrustedDevicesByIdentity(ctx context.Context, iID uuid.UUID) ([]Device, error)
+	ListTrustedDevicesByIdentityWithExpiration(ctx context.Context, iID uuid.UUID, deviceTrustDuration time.Duration) ([]Device, error)
 }

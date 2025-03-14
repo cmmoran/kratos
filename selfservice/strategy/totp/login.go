@@ -59,7 +59,9 @@ func (s *Strategy) PopulateLoginMethod(r *http.Request, requestedAAL identity.Au
 
 	sr.UI.SetCSRF(s.d.GenerateCSRFToken(r))
 	sr.UI.SetNode(node.NewInputField("totp_code", "", node.TOTPGroup, node.InputAttributeTypeText, node.WithRequiredInputAttribute).WithMetaLabel(text.NewInfoLoginTOTPLabel()))
-	sr.UI.SetNode(node.NewInputField("trust_device", false, node.TOTPGroup, node.InputAttributeTypeCheckbox).WithMetaLabel(text.NewInfoTrustDeviceLabel()))
+	if !sr.Refresh {
+		sr.UI.SetNode(node.NewInputField("trust_device", false, node.TOTPGroup, node.InputAttributeTypeCheckbox).WithMetaLabel(text.NewInfoTrustDeviceLabel()))
+	}
 	sr.UI.GetNodes().Append(node.NewInputField("method", s.ID(), node.TOTPGroup, node.InputAttributeTypeSubmit).WithMetaLabel(text.NewInfoLoginTOTP()))
 
 	return nil
