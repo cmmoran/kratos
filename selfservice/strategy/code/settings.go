@@ -229,29 +229,34 @@ func (s *Strategy) continueSettingsFlowEnable(ctx context.Context, ctxUpdate *se
 		return nil, err
 	}
 
-	if creds, ok := i.GetCredentials(identity.CredentialsTypeCodeAuth); ok {
-		// Check if the credentials config is valid JSON
-		if !gjson.Valid(string(creds.Config)) {
-			return i, nil
+	creds, ok := i.GetCredentials(identity.CredentialsTypeCodeAuth)
+	if !ok {
+		_ = s.deps.IdentityValidator().Validate(ctx, i)
+		if creds, ok = i.GetCredentials(identity.CredentialsTypeCodeAuth); !ok {
+			return nil, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to find credentials for identity: %s", i.ID))
 		}
+	}
+	// Check if the credentials config is valid JSON
+	if !gjson.Valid(string(creds.Config)) {
+		return i, nil
+	}
 
-		var conf identity.CredentialsCode
-		if err = json.Unmarshal(creds.Config, &conf); err != nil {
-			return i, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to unmarshal credentials config: %s", err))
-		}
+	var conf identity.CredentialsCode
+	if err = json.Unmarshal(creds.Config, &conf); err != nil {
+		return i, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to unmarshal credentials config: %s", err))
+	}
 
-		conf.Disabled = false
-		if creds.Config, err = json.Marshal(conf); err != nil {
-			return i, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to marshal credentials config: %s", err))
-		}
-		i.SetCredentials(identity.CredentialsTypeCodeAuth, *creds)
-		// Since we added the method, it also means that we have authenticated it
-		if err = s.deps.SessionManager().SessionAddAuthenticationMethods(ctx, ctxUpdate.Session.ID, session.AuthenticationMethod{
-			Method: s.ID(),
-			AAL:    identity.AuthenticatorAssuranceLevel2,
-		}); err != nil {
-			return nil, err
-		}
+	conf.Disabled = false
+	if creds.Config, err = json.Marshal(conf); err != nil {
+		return i, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to marshal credentials config: %s", err))
+	}
+	i.SetCredentials(identity.CredentialsTypeCodeAuth, *creds)
+	// Since we added the method, it also means that we have authenticated it
+	if err = s.deps.SessionManager().SessionAddAuthenticationMethods(ctx, ctxUpdate.Session.ID, session.AuthenticationMethod{
+		Method: s.ID(),
+		AAL:    identity.AuthenticatorAssuranceLevel2,
+	}); err != nil {
+		return nil, err
 	}
 
 	ctxUpdate.UpdateIdentity(i)

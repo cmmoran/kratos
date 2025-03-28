@@ -5,7 +5,7 @@
 
 **Table of Contents**
 
-- [ (2025-03-24)](#2025-03-24)
+- [ (2025-04-02)](#2025-04-02)
   - [Breaking Changes](#breaking-changes)
   - [Related issue(s)](#related-issues)
   - [Related issue(s)](#related-issues-1)
@@ -14,7 +14,7 @@
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
-# [](https://github.com/ory/kratos/compare/v1.3.0...v) (2025-03-24)
+# [](https://github.com/ory/kratos/compare/v1.3.0...v) (2025-04-02)
 
 ## Breaking Changes
 
@@ -99,6 +99,8 @@ Closes https://github.com/ory-corp/cloud/issues/7176
 
 * Add exists clause ([#4191](https://github.com/ory/kratos/issues/4191)) ([a313dd6](https://github.com/ory/kratos/commit/a313dd6ba6d823deb40f14c738e3b609dbaad56c))
 * Add missing autocomplete attributes to identifier_first strategy ([#4215](https://github.com/ory/kratos/issues/4215)) ([e1f29c2](https://github.com/ory/kratos/commit/e1f29c2d3524f9444ec067c52d2c9f1d44fa6539))
+* Add missing csrf_token ([#4363](https://github.com/ory/kratos/issues/4363)) ([f441f41](https://github.com/ory/kratos/commit/f441f41312b81a570e99348f69b88008f4516660))
+* Add missing discriminator ([#4365](https://github.com/ory/kratos/issues/4365)) ([c10bb06](https://github.com/ory/kratos/commit/c10bb06bb9125fbc71863c5aa82194da2f2e2888))
 * Add missing saml group ([#4268](https://github.com/ory/kratos/issues/4268)) ([44eb305](https://github.com/ory/kratos/commit/44eb305cf91672798f7d57550a026c6b970f7566))
 * Add missing submit group ([#4354](https://github.com/ory/kratos/issues/4354)) ([106163d](https://github.com/ory/kratos/commit/106163d15e2eb84c3403d0ce8f829a9d9b3ce94f))
 * Add resend node to after registration verification flow ([#4260](https://github.com/ory/kratos/issues/4260)) ([9bc83a4](https://github.com/ory/kratos/commit/9bc83a410b8de9d649b6393f136889dd14098b0d))
@@ -120,18 +122,26 @@ Closes https://github.com/ory-corp/cloud/issues/7176
     This fixes a bug where when an identity is merged into another, the
     identifier of the original identity was not updated.
 
+* Apply strategy filters in identifier first as well ([#4352](https://github.com/ory/kratos/issues/4352)) ([ec3ecc5](https://github.com/ory/kratos/commit/ec3ecc562a4d6ab511e53210d14c143903176b8c))
 * Cancel conditional passkey before trying again ([#4247](https://github.com/ory/kratos/issues/4247)) ([d9f6f75](https://github.com/ory/kratos/commit/d9f6f75b6a43aad996f6390f73616a2cf596c6e4))
 * Check aal on sessions list endpoint ([#4305](https://github.com/ory/kratos/issues/4305)) ([44f97b8](https://github.com/ory/kratos/commit/44f97b85e36160b8cce272fd61fbe3ac7d810fbf)), closes [#3671](https://github.com/ory/kratos/issues/3671):
 
     The session check to list a user's own sessions now requires the same AAL level as the whoami check.
 
 * Count MFA addresses in CountActiveMultiFactorCredentials for code method ([9860c9a](https://github.com/ory/kratos/commit/9860c9a4faa5bd5d725c742c4d4ce9473baa0963)), closes [ory/network#409](https://github.com/ory/network/issues/409)
+* Div decoding ([#4362](https://github.com/ory/kratos/issues/4362)) ([ef9ee23](https://github.com/ory/kratos/commit/ef9ee235866c6f3958574d2e98f09de3ca1e83af))
 * Do not roll back transaction on partial identity insert error ([#4211](https://github.com/ory/kratos/issues/4211)) ([82660f0](https://github.com/ory/kratos/commit/82660f04e2f33d0aa86fccee42c90773a901d400))
 * Don't show oidc subject in login hints ([#4264](https://github.com/ory/kratos/issues/4264)) ([b95fd3f](https://github.com/ory/kratos/commit/b95fd3fa723521807824cad84e4a9ce812172311))
 * Duplicate autocomplete trigger ([6bbf915](https://github.com/ory/kratos/commit/6bbf91593a37e4973a86f610290ebab44df8dc81))
 * Enable b2b_sso hook in more places ([#4168](https://github.com/ory/kratos/issues/4168)) ([0c48ad1](https://github.com/ory/kratos/commit/0c48ad12b978bf58b6bc68b0684a7879f93ebf06)):
 
     fix: allow b2b_sso hook in more places
+
+* Ensure context is not canceled during password hashing ([#4364](https://github.com/ory/kratos/issues/4364)) ([e9c6a18](https://github.com/ory/kratos/commit/e9c6a1803daa622e559d0b8904cde4dc8834f1e2)):
+
+    Especially during large imports of plaintext passwords there can be a
+    lot of useless hashing, even after the request timed out or got
+    canceled.
 
 * Ensure that auto_link_credentials markers are being properly overwritten ([#4320](https://github.com/ory/kratos/issues/4320)) ([a4fd8ac](https://github.com/ory/kratos/commit/a4fd8acbbbd0cd0ff054e0f8737b076745aa71c8)), closes [#1234](https://github.com/ory/kratos/issues/1234) [#1234](https://github.com/ory/kratos/issues/1234):
 
@@ -191,6 +201,7 @@ Closes https://github.com/ory-corp/cloud/issues/7176
     The verification status is now correctly being transported when executing a recovery hook.
 
 * Set correct request url in acc linking and oidc flows ([#4282](https://github.com/ory/kratos/issues/4282)) ([07cb83c](https://github.com/ory/kratos/commit/07cb83c672326848162998a9cfbc8ca34af42bf0))
+* Settings linking error override ([#4368](https://github.com/ory/kratos/issues/4368)) ([6e30865](https://github.com/ory/kratos/commit/6e30865e1314bc4c4fdc3b472b34c92019eadfa4))
 * Show code email in most error states ([#4338](https://github.com/ory/kratos/issues/4338)) ([905d1e5](https://github.com/ory/kratos/commit/905d1e5dc8fcdc7f96afa14a5ee036060ea43056))
 * Span names ([#4232](https://github.com/ory/kratos/issues/4232)) ([dbae98a](https://github.com/ory/kratos/commit/dbae98a26b8e2a3328d8510745ddb58c18b7ad3d))
 * Stricter JSON patch checking for PATCH identities ([#4263](https://github.com/ory/kratos/issues/4263)) ([906f6c8](https://github.com/ory/kratos/commit/906f6c8fdf9ec0834993a44f8a19697b38dd63d2))
@@ -363,6 +374,11 @@ Closes https://github.com/ory-corp/cloud/issues/7176
     This patch adds the ability to verify Android APK origins used during WebAuthn/Passkey exchange.
     
     Upgrades go-webauthn and includes fixes for Go 1.23 and workarounds for Swagger.
+
+* Support importing more credentials ([#4361](https://github.com/ory/kratos/issues/4361)) ([9a6dadf](https://github.com/ory/kratos/commit/9a6dadfefaf0d54c227cdbab5a2cbe7da14faa96)):
+
+    Adds support to import SAML credentials. SAML connections are only
+    available in Ory Enterprise License / Ory Network.
 
 * Update only necessary database columns in UpdateVerifiableAddress ([#4292](https://github.com/ory/kratos/issues/4292)) ([168a3f6](https://github.com/ory/kratos/commit/168a3f6c68b1fbc0ddcd455f8762f6de19879442)):
 

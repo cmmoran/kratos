@@ -112,7 +112,7 @@
       "type": "object",
       "properties": {
         "hook": {
-          "const": "b2b_sso"
+          "enum": ["b2b_sso", "organization"]
         },
         "config": {
           "type": "object",
@@ -2770,7 +2770,7 @@
       "additionalProperties": false
     },
     "tracing": {
-      "$ref": "https://raw.githubusercontent.com/ory/x/v0.0.689/otelx/config.schema.json"
+      "$ref": "https://raw.githubusercontent.com/ory/x/v0.0.705/otelx/config.schema.json"
     },
     "log": {
       "title": "Log",

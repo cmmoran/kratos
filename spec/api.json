@@ -2480,6 +2480,7 @@
         "discriminator": {
           "mapping": {
             "a": "#/components/schemas/uiNodeAnchorAttributes",
+            "div": "#/components/schemas/uiNodeDivisionAttributes",
             "img": "#/components/schemas/uiNodeImageAttributes",
             "input": "#/components/schemas/uiNodeInputAttributes",
             "script": "#/components/schemas/uiNodeScriptAttributes",
@@ -2502,6 +2503,9 @@
           },
           {
             "$ref": "#/components/schemas/uiNodeScriptAttributes"
+          },
+          {
+            "$ref": "#/components/schemas/uiNodeDivisionAttributes"
           }
         ],
         "title": "Attributes represents a list of attributes (e.g. `href=\"foo\"` for links)."
@@ -3799,6 +3803,10 @@
       "updateSettingsFlowWithSamlMethod": {
         "description": "Update settings flow using SAML",
         "properties": {
+          "csrf_token": {
+            "description": "The CSRF Token",
+            "type": "string"
+          },
           "flow": {
             "description": "Flow ID is the flow's ID.\n\nin: query",
             "type": "string"
