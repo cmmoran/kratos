@@ -111,8 +111,8 @@ func TestSender(t *testing.T) {
 
 			require.NoError(t, reg.VerificationFlowPersister().CreateVerificationFlow(ctx, f))
 
-			require.NoError(t, reg.CodeSender().SendVerificationCode(ctx, f, "email", "tracked@ory.sh"))
-			require.ErrorIs(t, reg.CodeSender().SendVerificationCode(ctx, f, "email", "not-tracked@ory.sh"), code.ErrUnknownAddress)
+			require.NoError(t, reg.CodeSender().SendVerificationCode(ctx, f, identity.ChannelTypeEmail, "tracked@ory.sh"))
+			require.ErrorIs(t, reg.CodeSender().SendVerificationCode(ctx, f, identity.ChannelTypeEmail, "not-tracked@ory.sh"), code.ErrUnknownAddress)
 		}
 
 		t.Run("case=with default templates", func(t *testing.T) {
@@ -190,7 +190,7 @@ func TestSender(t *testing.T) {
 
 					require.NoError(t, reg.VerificationFlowPersister().CreateVerificationFlow(ctx, f))
 
-					err = reg.CodeSender().SendVerificationCode(ctx, f, "email", "not-tracked@ory.sh")
+					err = reg.CodeSender().SendVerificationCode(ctx, f, identity.ChannelTypeEmail, "not-tracked@ory.sh")
 					require.ErrorIs(t, err, code.ErrUnknownAddress)
 				},
 			},

@@ -123,6 +123,12 @@ func (s *Strategy) Settings(ctx context.Context, w http.ResponseWriter, r *http.
 	var p updateSettingsFlowWithProfileMethod
 	ctxUpdate, err := settings.PrepareUpdate(s.d, w, r, f, ss, settings.ContinuityKey(s.SettingsStrategyID()), &p)
 	if errors.Is(err, settings.ErrContinuePreviousAction) {
+		s.d.Logger().
+			WithField("payload", p).
+			WithField("strategy", s.SettingsStrategyID()).
+			WithField("action", "settings").
+			WithField("error", err).
+			Info("Continuing previous action.")
 		return ctxUpdate, s.continueFlow(ctx, r, ctxUpdate, p)
 	} else if err != nil {
 		return ctxUpdate, s.handleSettingsError(ctx, w, r, ctxUpdate, nil, p, err)

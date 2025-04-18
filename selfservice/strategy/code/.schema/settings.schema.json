@@ -22,5 +22,8 @@
       "type": "object",
       "additionalProperties": true
     }
+  },
+  "not": {
+    "required": ["code_enable", "code_disable"]
   }
 }

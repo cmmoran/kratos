@@ -262,8 +262,8 @@ func (f *Flow) SetState(state State) {
 	f.State = state
 }
 
-func (t *Flow) GetTransientPayload() json.RawMessage {
-	return t.TransientPayload
+func (f *Flow) GetTransientPayload() json.RawMessage {
+	return f.TransientPayload
 }
 
 func (f *Flow) ToLoggerField() map[string]interface{} {
@@ -279,4 +279,28 @@ func (f *Flow) ToLoggerField() map[string]interface{} {
 		"nid":         f.NID,
 		"state":       f.State,
 	}
+}
+
+func (f *Flow) HasContinueWithRedirect() bool {
+	if len(f.ContinueWithItems) > 0 {
+		for _, item := range f.ContinueWithItems {
+			if _, ok := item.(flow.ContinueWithRedirect); ok {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+func (f *Flow) ContinueWithRedirect() flow.ContinueWithRedirect {
+	//@TODO: sort by priority
+	if len(f.ContinueWithItems) > 0 {
+		for _, item := range f.ContinueWithItems {
+			if cwr, ok := item.(flow.ContinueWithRedirect); ok {
+				return cwr
+			}
+		}
+	}
+
+	return nil
 }

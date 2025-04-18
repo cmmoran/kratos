@@ -72,8 +72,24 @@ func init() {
 }
 
 func servePublic(ctx context.Context, r driver.Registry, cmd *cobra.Command, slOpts *servicelocatorx.Options) func() error {
-	c := r.Config()
 	l := r.Logger()
+
+	key := "no-public"
+	skipServe, err := cmd.Flags().GetBool(key)
+	if err != nil {
+		l.Printf("Unable to get command line flag \"%s\"", key)
+		return func() error {
+			return err
+		}
+	}
+	if skipServe {
+		return func() error {
+			l.Printf("Serve httpd is disabled via --%s", key)
+			return nil
+		}
+	}
+
+	c := r.Config()
 	n := negroni.New()
 
 	for _, mw := range slOpts.HTTPMiddlewares() {
@@ -171,8 +187,24 @@ func servePublic(ctx context.Context, r driver.Registry, cmd *cobra.Command, slO
 }
 
 func serveAdmin(ctx context.Context, r driver.Registry, cmd *cobra.Command, slOpts *servicelocatorx.Options) func() error {
-	c := r.Config()
 	l := r.Logger()
+
+	key := "no-admin"
+	skipServe, err := cmd.Flags().GetBool(key)
+	if err != nil {
+		l.Printf("Unable to get command line flag \"%s\"", key)
+		return func() error {
+			return err
+		}
+	}
+	if skipServe {
+		return func() error {
+			l.Printf("Serve httpd is disabled via --%s", key)
+			return nil
+		}
+	}
+
+	c := r.Config()
 	n := negroni.New()
 
 	for _, mw := range slOpts.HTTPMiddlewares() {

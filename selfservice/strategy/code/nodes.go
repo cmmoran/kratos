@@ -48,7 +48,6 @@ func NewTrustedDevicesCodeNode(devices []session.Device) *node.Node {
 			node.CodeGroup,
 			node.WithDivisionAttributes(func(o *node.DivisionAttributes) {
 				o.Data = dataMap
-				return
 			}),
 		)
 	}

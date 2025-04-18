@@ -6,6 +6,7 @@ package code
 import (
 	"context"
 	"encoding/json"
+	"github.com/ory/x/sqlxx"
 	"net/http"
 	"time"
 
@@ -86,7 +87,7 @@ func (s *Strategy) PopulateSettingsMethod(ctx context.Context, r *http.Request, 
 		return err
 	}
 	if hasCode {
-		s.deps.Audit().WithField("has_code", hasCode).Info("code credentials enabled for account")
+		s.deps.Audit().WithRequest(r).WithField("has_code", hasCode).Info("code credentials enabled for account")
 		var devices []session.Device
 		devices, err = s.deps.SessionPersister().ListTrustedDevicesByIdentityWithExpiration(ctx, i.ID, s.deps.Config().SecurityTrustDeviceDuration(ctx))
 		if err != nil {
@@ -98,7 +99,7 @@ func (s *Strategy) PopulateSettingsMethod(ctx context.Context, r *http.Request, 
 			f.UI.Nodes.Upsert(deviceNode)
 		}
 	} else {
-		s.deps.Audit().WithField("has_code", hasCode).Info("code credentials missing")
+		s.deps.Audit().WithRequest(r).WithField("has_code", hasCode).Info("code credentials missing")
 		f.UI.Nodes.Append(node.NewInputField(node.CodeEnable, "true", node.CodeGroup, node.InputAttributeTypeSubmit, node.WithRequiredInputAttribute).WithMetaLabel(text.NewInfoSelfServiceSettingsEnableMethod()))
 	}
 
@@ -229,29 +230,33 @@ func (s *Strategy) continueSettingsFlowEnable(ctx context.Context, ctxUpdate *se
 		return nil, err
 	}
 
-	if creds, ok := i.GetCredentials(identity.CredentialsTypeCodeAuth); ok {
-		// Check if the credentials config is valid JSON
-		if !gjson.Valid(string(creds.Config)) {
-			return i, nil
-		}
+	creds := i.GetCredentialsOr(identity.CredentialsTypeCodeAuth, &identity.Credentials{
+		Type:        identity.CredentialsTypeCodeAuth,
+		Identifiers: []string{},
+		Config:      sqlxx.JSONRawMessage(`{"disabled": false}`),
+		Version:     1,
+	})
+	// Check if the credentials config is valid JSON
+	if !gjson.Valid(string(creds.Config)) {
+		return i, nil
+	}
 
-		var conf identity.CredentialsCode
-		if err = json.Unmarshal(creds.Config, &conf); err != nil {
-			return i, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to unmarshal credentials config: %s", err))
-		}
+	var conf identity.CredentialsCode
+	if err = json.Unmarshal(creds.Config, &conf); err != nil {
+		return i, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to unmarshal credentials config: %s", err))
+	}
 
-		conf.Disabled = false
-		if creds.Config, err = json.Marshal(conf); err != nil {
-			return i, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to marshal credentials config: %s", err))
-		}
-		i.SetCredentials(identity.CredentialsTypeCodeAuth, *creds)
-		// Since we added the method, it also means that we have authenticated it
-		if err = s.deps.SessionManager().SessionAddAuthenticationMethods(ctx, ctxUpdate.Session.ID, session.AuthenticationMethod{
-			Method: s.ID(),
-			AAL:    identity.AuthenticatorAssuranceLevel2,
-		}); err != nil {
-			return nil, err
-		}
+	conf.Disabled = false
+	if creds.Config, err = json.Marshal(conf); err != nil {
+		return i, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to marshal credentials config: %s", err))
+	}
+	i.SetCredentials(identity.CredentialsTypeCodeAuth, *creds)
+	// Since we added the method, it also means that we have authenticated it
+	if err = s.deps.SessionManager().SessionAddAuthenticationMethods(ctx, ctxUpdate.Session.ID, session.AuthenticationMethod{
+		Method: s.ID(),
+		AAL:    identity.AuthenticatorAssuranceLevel2,
+	}); err != nil {
+		return nil, err
 	}
 
 	ctxUpdate.UpdateIdentity(i)

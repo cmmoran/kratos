@@ -104,8 +104,8 @@ const (
 	InfoNodeLabelID                                         // 1070004
 	InfoNodeLabelSubmit                                     // 1070005
 	InfoNodeLabelVerifyOTP                                  // 1070006
-	InfoNodeLabelEmail                                      // 1070007
-	InfoNodeLabelResendOTP                                  // 1070008
+	InfoNodeLabelChannel                                    // 1070007
+	InfoNodeLabelResendCode                                 // 1070008
 	InfoNodeLabelContinue                                   // 1070009
 	InfoNodeLabelRecoveryCode                               // 1070010
 	InfoNodeLabelVerificationCode                           // 1070011
@@ -116,10 +116,10 @@ const (
 )
 
 const (
-	InfoSelfServiceVerification                  ID = 1080000 + iota // 1080000
-	InfoSelfServiceVerificationEmailSent                             // 1080001
-	InfoSelfServiceVerificationSuccessful                            // 1080002
-	InfoSelfServiceVerificationEmailWithCodeSent                     // 1080003
+	InfoSelfServiceVerification           ID = 1080000 + iota // 1080000
+	InfoSelfServiceVerificationEmailSent                      // 1080001
+	InfoSelfServiceVerificationSuccessful                     // 1080002
+	InfoSelfServiceVerificationCodeSent                       // 1080003
 )
 
 const (

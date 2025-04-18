@@ -87,7 +87,7 @@ func (p *DevicePersister) ListTrustedDevicesByIdentityWithExpiration(ctx context
 	}
 
 	now := time.Now().UTC()
-	slices.DeleteFunc(devices, func(device session.Device) bool {
+	_ = slices.DeleteFunc(devices, func(device session.Device) bool {
 		if device.Trusted && len(device.AMR) > 0 {
 			for _, amr := range device.AMR {
 				if now.After(amr.CompletedAt.Add(deviceTrustDuration)) {

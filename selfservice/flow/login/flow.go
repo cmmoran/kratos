@@ -309,11 +309,11 @@ func (f *Flow) GetFlowName() flow.FlowName {
 }
 
 func (f *Flow) SetState(state flow.State) {
-	f.State = State(state)
+	f.State = state
 }
 
-func (t *Flow) GetTransientPayload() json.RawMessage {
-	return t.TransientPayload
+func (f *Flow) GetTransientPayload() json.RawMessage {
+	return f.TransientPayload
 }
 
 var _ flow.FlowWithContinueWith = new(Flow)
@@ -345,4 +345,28 @@ func (f *Flow) ToLoggerField() map[string]interface{} {
 		"refresh":       f.Refresh,
 		"requested_aal": f.RequestedAAL,
 	}
+}
+
+func (f *Flow) HasContinueWithRedirect() bool {
+	if len(f.ContinueWithItems) > 0 {
+		for _, item := range f.ContinueWithItems {
+			if _, ok := item.(flow.ContinueWithRedirect); ok {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+func (f *Flow) ContinueWithRedirect() flow.ContinueWithRedirect {
+	//@TODO: sort by priority
+	if len(f.ContinueWithItems) > 0 {
+		for _, item := range f.ContinueWithItems {
+			if cwr, ok := item.(flow.ContinueWithRedirect); ok {
+				return cwr
+			}
+		}
+	}
+
+	return nil
 }

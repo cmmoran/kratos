@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ory/kratos/driver/config"
+	"github.com/ory/kratos/request"
 	"github.com/ory/kratos/selfservice/strategy"
 	"github.com/ory/x/decoderx"
 
@@ -121,10 +122,11 @@ func maybeAddHeadersToRequestContext(r *http.Request, keys ...string) {
 	if r == nil || len(r.Header) == 0 {
 		return
 	}
+	ctx := r.Context()
 	for _, key := range keys {
 		if r.Header.Get(key) != "" {
-			ctx := context.WithValue(r.Context(), strings.ToLower(key), r.Header.Get(key))
-			*r = *(r.Clone(ctx))
+			ctx = context.WithValue(ctx, request.ContextHeader(strings.ToLower(key)), r.Header.Get(key))
 		}
 	}
+	*r = *(r.Clone(ctx))
 }

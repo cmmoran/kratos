@@ -310,7 +310,7 @@ func (p *Persister) UpsertSession(ctx context.Context, s *session.Session) (err 
 			device := &(s.Devices[i])
 			device.SessionID = s.ID
 			device.NID = s.NID
-			if device.AMR == nil || len(device.AMR) == 0 {
+			if len(device.AMR) == 0 {
 				device.AMR = make(session.AuthenticationMethods, 0)
 			}
 
@@ -575,7 +575,7 @@ func (p *Persister) ListTrustedDevicesByIdentityWithExpiration(ctx context.Conte
 	}
 
 	now := time.Now().UTC()
-	slices.DeleteFunc(devices, func(device session.Device) bool {
+	_ = slices.DeleteFunc(devices, func(device session.Device) bool {
 		if device.Trusted && len(device.AMR) > 0 {
 			for _, amr := range device.AMR {
 				if now.After(amr.CompletedAt.Add(deviceTrustDuration)) {

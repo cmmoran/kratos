@@ -110,6 +110,12 @@ func (s *ErrorHandler) reauthenticate(
 	params.Set("return_to", returnTo.String())
 
 	redirectTo := urlx.AppendPaths(urlx.CopyWithQuery(s.d.Config().SelfPublicURL(ctx), params), login.RouteInitBrowserFlow).String()
+	if f.Identity != nil {
+		if available, valid := f.Identity.InternalAvailableAAL.ToAAL(); valid {
+			params.Set("aal", string(available))
+			redirectTo = urlx.AppendPaths(urlx.CopyWithQuery(s.d.Config().SelfPublicURL(ctx), params), login.RouteInitBrowserFlow).String()
+		}
+	}
 	err.RedirectBrowserTo = redirectTo
 	if f.Type == flow.TypeAPI || x.IsJSONRequest(r) {
 		s.d.Writer().WriteError(w, r, err)

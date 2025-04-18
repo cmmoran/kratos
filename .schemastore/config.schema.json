@@ -77,6 +77,19 @@
       "properties": {
         "hook": {
           "const": "require_verified_address"
+        },
+        "config": {
+          "type": "object",
+          "properties": {
+            "require_all_verified": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "additionalProperties": false,
+          "default": {
+            "require_all_verified": false
+          }
         }
       },
       "additionalProperties": false,
@@ -112,7 +125,7 @@
       "type": "object",
       "properties": {
         "hook": {
-          "const": "b2b_sso"
+          "enum": ["b2b_sso", "organization"]
         },
         "config": {
           "type": "object",
@@ -1452,8 +1465,16 @@
                 "enable_legacy_one_step": {
                   "type": "boolean",
                   "title": "Disable two-step registration",
-                  "description": "Two-step registration is a significantly improved sign up flow and recommended when using more than one sign up methods. To revert to one-step registration, set this to `true`.",
+                  "description": "Deprecated, please use `style` instead.",
+                  "deprecationMessage": "Deprecated, please use `style` instead.",
                   "default": false
+                },
+                "style": {
+                  "title": "Registration Flow Style",
+                  "description": "The style of the registration flow. If set to `unified` the login flow will be a one-step process. If set to `profile_first` the registration flow will first ask for the profile information first, and then the credentials.",
+                  "type": "string",
+                  "enum": ["unified", "profile_first"],
+                  "default": "profile_first"
                 }
               }
             },
@@ -2770,7 +2791,7 @@
       "additionalProperties": false
     },
     "tracing": {
-      "$ref": "https://raw.githubusercontent.com/ory/x/v0.0.689/otelx/config.schema.json"
+      "$ref": "https://raw.githubusercontent.com/cmmoran/ory-x/d9d182c6a737/otelx/config.schema.json"
     },
     "log": {
       "title": "Log",
@@ -3331,6 +3352,12 @@
           "title": "Enable faster session extension",
           "description": "If enabled allows faster session extension by skipping the session lookup. Disabling this feature will be deprecated in the future.",
           "default": false
+        },
+        "password_profile_registration_node_group": {
+          "title": "Registration node group",
+          "description": "The node group to use for registration flows. Previously, the node group for the password method's profile fields was `password`. Going forward, it will be `default`. This switch can toggle between those two for backwards compatibility",
+          "enum": ["password", "default"],
+          "default": "default"
         }
       },
       "additionalProperties": false
@@ -3353,6 +3380,11 @@
         }
       },
       "additionalProperties": false
+    },
+    "revision": {
+      "title": "Config revision",
+      "description": "Set a recognizable revision. This could be the commit time or a random value. This value is exposed at the `/health/config` endpoint and allows you to ensure that the correct config is loaded.",
+      "type": "string"
     }
   },
   "allOf": [

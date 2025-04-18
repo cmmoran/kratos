@@ -218,8 +218,19 @@ func (b *Builder) addURLEncodedBody(ctx context.Context, jsonnetSnippet []byte, 
 	return nil
 }
 
+type ContextHeader string
+
 func (b *Builder) BuildRequest(ctx context.Context, body interface{}) (*retryablehttp.Request, error) {
 	b.r.Header = b.Config.Header
+	fields := []ContextHeader{"x-correlation-id", "x-session-entropy"}
+	for _, f := range fields {
+		fRaw := ctx.Value(f)
+		if fRaw != nil {
+			if fVal := fRaw.(string); fVal != "" {
+				b.r.Header.Set(string(f), fVal)
+			}
+		}
+	}
 	if err := b.addAuth(); err != nil {
 		return nil, err
 	}

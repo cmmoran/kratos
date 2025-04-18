@@ -112,7 +112,7 @@ func (e *HookExecutor) PostRegistrationHook(w http.ResponseWriter, r *http.Reque
 		WithField("flow_method", ct).
 		Debug("Running PostRegistrationPrePersistHooks.")
 	for k, executor := range e.d.PostRegistrationPrePersistHooks(ctx, ct) {
-		if err := executor.ExecutePostRegistrationPrePersistHook(w, r, registrationFlow, i); err != nil {
+		if err = executor.ExecutePostRegistrationPrePersistHook(w, r, registrationFlow, i); err != nil {
 			if errors.Is(err, ErrHookAbortFlow) {
 				e.d.Logger().
 					WithRequest(r).
@@ -149,12 +149,12 @@ func (e *HookExecutor) PostRegistrationHook(w http.ResponseWriter, r *http.Reque
 	}
 
 	// We need to make sure that the identity has a valid schema before passing it down to the identity pool.
-	if err := e.d.IdentityValidator().Validate(ctx, i); err != nil {
+	if err = e.d.IdentityValidator().Validate(ctx, i); err != nil {
 		return err
 	}
 	// We're now creating the identity because any of the hooks could trigger a "redirect" or a "session" which
 	// would imply that the identity has to exist already.
-	if err := e.d.IdentityManager().Create(ctx, i); err != nil {
+	if err = e.d.IdentityManager().Create(ctx, i); err != nil {
 		if errors.Is(err, sqlcon.ErrUniqueViolation) {
 			strategy, err := e.d.AllLoginStrategies().Strategy(ct)
 			if err != nil {

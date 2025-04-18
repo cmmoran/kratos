@@ -492,21 +492,27 @@ func (p *Config) validateIdentitySchemas(ctx context.Context) error {
 		return err
 	}
 
+	closers := make([]io.Closer, 0)
+	defer func() {
+		for _, c := range closers {
+			_ = c.Close()
+		}
+	}()
 	for _, s := range ss {
-		resource, err := jsonschema.LoadURL(ctx, s.URL)
-		if err != nil {
-			return errors.WithStack(err)
+		resource, rerr := jsonschema.LoadURL(ctx, s.URL)
+		if rerr != nil {
+			return errors.WithStack(rerr)
 		}
-		defer resource.Close()
+		closers = append(closers, resource)
 
-		schema, err := io.ReadAll(io.LimitReader(resource, 1024*1024))
-		if err != nil {
-			return errors.WithStack(err)
+		schema, rerr := io.ReadAll(io.LimitReader(resource, 1024*1024))
+		if rerr != nil {
+			return errors.WithStack(rerr)
 		}
 
-		if err = j.Validate(bytes.NewBuffer(schema)); err != nil {
-			p.formatJsonErrors(schema, err)
-			return errors.WithStack(err)
+		if rerr = j.Validate(bytes.NewBuffer(schema)); rerr != nil {
+			p.formatJsonErrors(schema, rerr)
+			return errors.WithStack(rerr)
 		}
 	}
 	return nil

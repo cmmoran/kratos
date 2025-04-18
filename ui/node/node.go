@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -144,6 +145,10 @@ func (n *Node) WithMetaLabel(label *text.Message) *Node {
 
 func (n *Node) GetValue() interface{} {
 	return n.Attributes.GetValue()
+}
+
+func (n *Node) HasValue() bool {
+	return reflect.ValueOf(n.Attributes.GetValue()).IsValid()
 }
 
 func (n Nodes) Find(id string) *Node {

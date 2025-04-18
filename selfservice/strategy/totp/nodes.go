@@ -76,7 +76,6 @@ func NewTrustedDevicesTOTPNode(devices []session.Device) *node.Node {
 			node.TOTPGroup,
 			node.WithDivisionAttributes(func(o *node.DivisionAttributes) {
 				o.Data = dataMap
-				return
 			}),
 		)
 	}

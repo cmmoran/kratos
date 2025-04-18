@@ -181,7 +181,7 @@ type FrontendAPI interface {
 			This endpoint initializes a browser-based account verification flow. Once initialized, the browser will be redirected to
 		`selfservice.flows.verification.ui_url` with the flow ID set as the query parameter `?flow=`.
 
-		If this endpoint is called via an AJAX request, the response contains the recovery flow without any redirects.
+		If this endpoint is called via an AJAX request, the response contains the verification flow without any redirects.
 
 		This endpoint is NOT INTENDED for API clients and only works with browsers (Chrome, Firefox, ...).
 
@@ -931,7 +931,7 @@ type FrontendAPI interface {
 			Use this endpoint to complete a verification flow. This endpoint
 		behaves differently for API and browser flows and has several states:
 
-		`choose_method` expects `flow` (in the URL query) and `email` (in the body) to be sent
+		`choose_method` expects `flow` (in the URL query) and `email` OR `sms` (in the body) to be sent
 		and works with API- and Browser-initiated flows.
 		For API clients and Browser clients with HTTP Header `Accept: application/json` it either returns a HTTP 200 OK when the form is valid and HTTP 400 OK when the form is invalid
 		and a HTTP 303 See Other redirect with a fresh verification flow if the flow was otherwise invalid (e.g. expired).
@@ -1842,7 +1842,7 @@ CreateBrowserVerificationFlow Create Verification Flow for Browser Clients
 This endpoint initializes a browser-based account verification flow. Once initialized, the browser will be redirected to
 `selfservice.flows.verification.ui_url` with the flow ID set as the query parameter `?flow=`.
 
-If this endpoint is called via an AJAX request, the response contains the recovery flow without any redirects.
+If this endpoint is called via an AJAX request, the response contains the verification flow without any redirects.
 
 This endpoint is NOT INTENDED for API clients and only works with browsers (Chrome, Firefox, ...).
 
@@ -6208,7 +6208,7 @@ UpdateVerificationFlow Complete Verification Flow
 Use this endpoint to complete a verification flow. This endpoint
 behaves differently for API and browser flows and has several states:
 
-`choose_method` expects `flow` (in the URL query) and `email` (in the body) to be sent
+`choose_method` expects `flow` (in the URL query) and `email` OR `sms` (in the body) to be sent
 and works with API- and Browser-initiated flows.
 For API clients and Browser clients with HTTP Header `Accept: application/json` it either returns a HTTP 200 OK when the form is valid and HTTP 400 OK when the form is invalid
 and a HTTP 303 See Other redirect with a fresh verification flow if the flow was otherwise invalid (e.g. expired).

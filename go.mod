@@ -3,7 +3,7 @@ module github.com/ory/kratos
 go 1.24.1
 
 replace (
-	github.com/coreos/go-oidc/v3 => github.com/ory/go-oidc/v3 v3.0.0-20241127113405-e5362711266b
+	github.com/coreos/go-oidc/v3 => github.com/ory/go-oidc/v3 v3.0.0-20250127100350-d93efdd14353
 
 	github.com/go-swagger/go-swagger => github.com/aeneasr/go-swagger v0.19.1-0.20241013070044-bccef3a12e26 // See https://github.com/go-swagger/go-swagger/issues/3131
 	// github.com/go-swagger/go-swagger => ../../go-swagger/go-swagger
@@ -16,7 +16,7 @@ replace (
 	// official SDK, allowing for the Ory CLI to consume Ory Kratos' CLI commands.
 	github.com/ory/client-go => ./internal/client-go
 
-	github.com/ory/x => github.com/cmmoran/ory-x v0.0.0-20250313154406-a884b6a0b910
+	github.com/ory/x => github.com/cmmoran/ory-x v0.0.0-20250421141018-4c4724acb606
 )
 
 require (
@@ -94,7 +94,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.35.0
 	golang.org/x/crypto v0.36.0
 	golang.org/x/exp v0.0.0-20250305212735-054e65f0b394 // indirect
-	golang.org/x/net v0.37.0
+	golang.org/x/net v0.38.0
 	golang.org/x/oauth2 v0.28.0
 	golang.org/x/sync v0.12.0
 	golang.org/x/text v0.23.0

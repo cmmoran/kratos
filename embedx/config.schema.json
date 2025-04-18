@@ -77,6 +77,19 @@
       "properties": {
         "hook": {
           "const": "require_verified_address"
+        },
+        "config": {
+          "type": "object",
+          "properties": {
+            "require_all_verified": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "additionalProperties": false,
+          "default": {
+            "require_all_verified": false
+          }
         }
       },
       "additionalProperties": false,

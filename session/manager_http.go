@@ -37,6 +37,7 @@ import (
 	"github.com/ory/herodot"
 
 	"github.com/ory/kratos/identity"
+	"github.com/ory/kratos/request"
 	"github.com/ory/kratos/x"
 )
 
@@ -479,7 +480,7 @@ func (s *ManagerHTTP) ActivateSession(r *http.Request, session *Session, i *iden
 	session.AuthenticatedAt = authenticatedAt
 
 	currentDevice := session.SetSessionDeviceInformation(r.WithContext(ctx))
-	s.r.Audit().WithField("current_device", currentDevice).WithField("devices", session.Devices).Info("activatesession: current_device")
+	s.r.Audit().WithRequest(r).WithField("current_device", currentDevice).WithField("devices", session.Devices).Info("activatesession: current_device")
 	s.adjustSessionAAL(ctx, session, currentDevice, i)
 
 	session.SetAuthenticatorAssuranceLevel("")
@@ -497,10 +498,20 @@ func (s *ManagerHTTP) adjustSessionAAL(ctx context.Context, sess *Session, curre
 	if iaalRaw, ok := i.InternalAvailableAAL.ToAAL(); ok {
 		iaal = iaalRaw
 	}
-	if currentDevice.Fingerprint != nil && (iaal > identity.AuthenticatorAssuranceLevel1) && (currentDevice.AMR == nil || len(currentDevice.AMR) == 0) { // Don't perform the list devices call if there's no fingerprint anyway
-		trustedDevices := make([]Device, 0)
+	if currentDevice.Fingerprint != nil && (iaal > identity.AuthenticatorAssuranceLevel1) && len(currentDevice.AMR) == 0 { // Don't perform the list devices call if there's no fingerprint anyway
+		var trustedDevices []Device
 		if trustedDevices, err = s.r.SessionPersister().ListTrustedDevicesByIdentity(ctx, i.ID); err == nil && len(trustedDevices) > 0 {
-			s.r.Audit().WithField("session_trusted_devices", sess.TrustedDevices).WithField("trusted_devices", trustedDevices).WithField("current_device", currentDevice).Info("comparing current_device to trusted_devices")
+			l := s.r.Audit()
+			fields := []request.ContextHeader{"x-correlation-id", "x-session-entropy"}
+			for _, f := range fields {
+				fRaw := ctx.Value(f)
+				if fRaw != nil {
+					if fVal := fRaw.(string); fVal != "" {
+						l = l.WithField(string(f), fVal)
+					}
+				}
+			}
+			l.WithField("session_trusted_devices", sess.TrustedDevices).WithField("trusted_devices", trustedDevices).WithField("current_device", currentDevice).Info("comparing current_device to trusted_devices")
 			if currentDevice.DeviceTrustConfidence(trustedDevices) > 0.0 {
 				for _, td := range trustedDevices {
 					if td.AMR == nil {
@@ -514,12 +525,12 @@ func (s *ManagerHTTP) adjustSessionAAL(ctx context.Context, sess *Session, curre
 							now := time.Now().UTC()
 							trustDeviceExpiration := amr.CompletedAt.UTC().Add(s.r.Config().SecurityTrustDeviceDuration(ctx))
 							if amr.AAL > sess.AuthenticatorAssuranceLevel && now.Before(trustDeviceExpiration) {
-								s.r.Audit().WithField("amr", amr).WithField("trusted_device", td).Trace("device trusted; adding aal2+ for this trusted device")
+								l.WithField("amr", amr).WithField("trusted_device", td).Trace("device trusted; adding aal2+ for this trusted device")
 								amr.DeviceTrustBased = true
 								sess.CompletedLoginForMethod(amr)
 								break
 							} else if now.After(trustDeviceExpiration) {
-								s.r.Audit().WithField("amr", amr).WithField("trusted_device", td).Trace("device trust is too old; not adding aal2+ for this trusted device")
+								l.WithField("amr", amr).WithField("trusted_device", td).Trace("device trust is too old; not adding aal2+ for this trusted device")
 							}
 						}
 					}

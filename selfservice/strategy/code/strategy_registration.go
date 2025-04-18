@@ -99,12 +99,12 @@ func (s *Strategy) PopulateRegistrationMethod(r *http.Request, f *registration.F
 	return nil
 }
 
-func (s *Strategy) PopulateRegistrationMethodCredentials(r *http.Request, f *registration.Flow, options ...registration.FormHydratorModifier) error {
+func (s *Strategy) PopulateRegistrationMethodCredentials(r *http.Request, f *registration.Flow, _ ...registration.FormHydratorModifier) error {
 	if !s.deps.Config().SelfServiceCodeStrategy(r.Context()).PasswordlessEnabled {
 		return nil
 	}
 
-	f.GetUI().Nodes.RemoveMatching(nodeRegistrationResendNode())
+	f.GetUI().Nodes.RemoveMatching(nodeRegistrationResendNode(identity.AddressTypeEmail))
 	f.GetUI().Nodes.RemoveMatching(nodeRegistrationSelectCredentialsNode())
 	f.GetUI().Nodes.RemoveMatching(nodeContinueButton())
 	f.GetUI().Nodes.RemoveMatching(nodeCodeInputFieldHidden())
@@ -115,13 +115,13 @@ func (s *Strategy) PopulateRegistrationMethodCredentials(r *http.Request, f *reg
 	return nil
 }
 
-func (s *Strategy) PopulateRegistrationMethodProfile(r *http.Request, f *registration.Flow, options ...registration.FormHydratorModifier) error {
+func (s *Strategy) PopulateRegistrationMethodProfile(r *http.Request, f *registration.Flow, _ ...registration.FormHydratorModifier) error {
 	if !s.deps.Config().SelfServiceCodeStrategy(r.Context()).PasswordlessEnabled {
 		return nil
 	}
 
 	f.GetUI().Nodes.RemoveMatching(nodeSubmitRegistration())
-	f.GetUI().Nodes.RemoveMatching(nodeRegistrationResendNode())
+	f.GetUI().Nodes.RemoveMatching(nodeRegistrationResendNode(identity.AddressTypeEmail))
 	f.GetUI().Nodes.RemoveMatching(nodeRegistrationSelectCredentialsNode())
 	f.GetUI().Nodes.RemoveMatching(nodeContinueButton())
 	f.GetUI().Nodes.RemoveMatching(nodeCodeInputFieldHidden())
@@ -192,7 +192,7 @@ func (s *Strategy) Register(w http.ResponseWriter, r *http.Request, f *registrat
 	switch f.GetState() {
 	case flow.StateChooseMethod:
 		return s.HandleRegistrationError(ctx, r, f, &p, s.registrationSendEmail(ctx, w, r, f, &p, i))
-	case flow.StateEmailSent:
+	case flow.StateEmailSent, flow.StateSmsSent:
 		return s.HandleRegistrationError(ctx, r, f, &p, s.registrationVerifyCode(ctx, f, &p, i))
 	case flow.StatePassedChallenge:
 		return s.HandleRegistrationError(ctx, r, f, &p, errors.WithStack(schema.NewNoRegistrationStrategyResponsible()))
@@ -228,14 +228,13 @@ func (s *Strategy) registrationSendEmail(ctx context.Context, w http.ResponseWri
 		addresses = append(addresses, Address{To: address.Address, Via: address.Channel})
 	}
 
-	// kratos only supports `email` identifiers at the moment with the code method
-	// this is validated in the identity validation step above
 	if err := s.deps.CodeSender().SendCode(ctx, f, i, addresses...); err != nil {
 		return errors.WithStack(err)
 	}
 
 	// sets the flow state to code sent
-	f.SetState(flow.NextState(f.GetState()))
+	via := addresses[0].Via
+	f.SetState(flow.NextState(f.GetState(), string(via)))
 
 	// Step 4: Generate the UI for the `code` input form
 	// re-initialize the UI with a "clean" new state
@@ -297,7 +296,7 @@ func (s *Strategy) registrationVerifyCode(ctx context.Context, f *registration.F
 	}
 
 	// Step 4: Verify the address
-	if err := s.verifyAddress(ctx, i, Address{
+	if err = s.verifyAddress(ctx, i, Address{
 		To:  registrationCode.Address,
 		Via: registrationCode.AddressType,
 	}); err != nil {
@@ -306,7 +305,8 @@ func (s *Strategy) registrationVerifyCode(ctx context.Context, f *registration.F
 
 	// since nothing has errored yet, we can assume that the code is correct
 	// and we can update the registration flow
-	f.SetState(flow.NextState(f.GetState()))
+	via := registrationCode.AddressType
+	f.SetState(flow.NextState(f.GetState(), string(via)))
 
 	if err := s.deps.RegistrationFlowPersister().UpdateRegistrationFlow(ctx, f); err != nil {
 		return errors.WithStack(err)

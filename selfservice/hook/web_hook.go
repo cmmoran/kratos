@@ -319,7 +319,8 @@ func (e *WebHook) execute(ctx context.Context, data *templateContext) error {
 			// configured timeout for the HTTP client.
 			ctx = context.WithoutCancel(ctx)
 		}
-		ctx, span := tracer.Start(ctx, "selfservice.webhook")
+		var span trace.Span
+		ctx, span = tracer.Start(ctx, "selfservice.webhook")
 		defer otelx.End(span, &finalErr)
 
 		if emitEvent {
@@ -328,7 +329,7 @@ func (e *WebHook) execute(ctx context.Context, data *templateContext) error {
 
 		defer func(startTime time.Time) {
 			var cid string
-			if rawCid := ctx.Value("x-correlation-id"); rawCid != nil {
+			if rawCid := ctx.Value(request.ContextHeader("x-correlation-id")); rawCid != nil {
 				cid = rawCid.(string)
 			}
 			traceID, spanID := span.SpanContext().TraceID(), span.SpanContext().SpanID()
@@ -384,9 +385,20 @@ func (e *WebHook) execute(ctx context.Context, data *templateContext) error {
 			)
 		}
 
-		e.deps.Logger().WithRequest(req.Request).Info("Dispatching webhook")
-
 		req = req.WithContext(ctx)
+
+		l := e.deps.Logger()
+
+		fields := []request.ContextHeader{"x-correlation-id", "x-session-entropy"}
+		for _, f := range fields {
+			fRaw := ctx.Value(f)
+			if fRaw != nil {
+				if fVal := fRaw.(string); fVal != "" {
+					l = l.WithField(string(f), fVal)
+				}
+			}
+		}
+		l.WithRequest(req.Request).Info("Dispatching webhook")
 
 		resp, err := httpClient.Do(req)
 		if err != nil {
@@ -401,7 +413,9 @@ func (e *WebHook) execute(ctx context.Context, data *templateContext) error {
 			}
 			return errors.WithStack(err)
 		}
-		defer resp.Body.Close()
+		defer func() {
+			_ = resp.Body.Close()
+		}()
 		resp.Body = io.NopCloser(io.LimitReader(resp.Body, 5<<20)) // read at most 5 MB from the response
 		span.SetAttributes(semconv.HTTPAttributesFromHTTPStatusCode(resp.StatusCode)...)
 
@@ -479,10 +493,6 @@ func parseWebhookResponse(resp *http.Response, id *identity.Identity) (err error
 
 		if len(hookResponse.Identity.State) > 0 {
 			id.State = hookResponse.Identity.State
-		}
-
-		if len(hookResponse.Identity.VerifiableAddresses) > 0 {
-			id.VerifiableAddresses = hookResponse.Identity.VerifiableAddresses
 		}
 
 		if len(hookResponse.Identity.VerifiableAddresses) > 0 {

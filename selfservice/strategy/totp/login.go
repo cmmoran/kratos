@@ -62,8 +62,7 @@ func (s *Strategy) PopulateLoginMethod(r *http.Request, requestedAAL identity.Au
 	sr.UI.SetNode(node.NewInputField("totp_code", "", node.TOTPGroup, node.InputAttributeTypeText, node.WithRequiredInputAttribute).WithMetaLabel(text.NewInfoLoginTOTPLabel()))
 	// if the return_to is <host>/settings, do _not_ add 'trust_device'
 	sr.SetReturnTo()
-	if !strings.HasSuffix(sr.ReturnTo, "/settings") {
-		s.d.Audit().WithRequest(r).WithField("return_to", sr.ReturnTo).Debug("adding trust_device to login flow")
+	if !sr.Refresh && !strings.HasSuffix(sr.ReturnTo, "/settings") {
 		sr.UI.SetNode(node.NewInputField("trust_device", false, node.TOTPGroup, node.InputAttributeTypeCheckbox).WithMetaLabel(text.NewInfoTrustDeviceLabel()))
 	}
 	sr.UI.GetNodes().Append(node.NewInputField("method", s.ID(), node.TOTPGroup, node.InputAttributeTypeSubmit).WithMetaLabel(text.NewInfoLoginTOTP()))

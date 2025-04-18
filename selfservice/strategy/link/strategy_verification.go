@@ -42,7 +42,7 @@ func (s *Strategy) PopulateVerificationMethod(r *http.Request, f *verification.F
 	f.UI.SetCSRF(s.d.GenerateCSRFToken(r))
 	f.UI.GetNodes().Upsert(
 		// v0.5: form.Field{Name: "email", Type: "email", Required: true}
-		node.NewInputField("email", nil, node.LinkGroup, node.InputAttributeTypeEmail, node.WithRequiredInputAttribute).WithMetaLabel(text.NewInfoNodeInputEmail()),
+		node.NewInputField("email", nil, node.LinkGroup, node.InputAttributeTypeEmail, node.WithRequiredInputAttribute).WithMetaLabel(text.NewInfoNodeInputForChannel(identity.AddressTypeEmail)),
 	)
 	f.UI.GetNodes().Append(node.NewInputField("method", s.VerificationStrategyID(), node.LinkGroup, node.InputAttributeTypeSubmit).WithMetaLabel(text.NewInfoNodeLabelContinue()))
 	return nil
@@ -88,7 +88,7 @@ func (s *Strategy) handleVerificationError(r *http.Request, f *verification.Flow
 		}
 		f.UI.GetNodes().Upsert(
 			// v0.5: form.Field{Name: "email", Type: "email", Required: true, Value: body.Body.Email}
-			node.NewInputField("email", email, node.LinkGroup, node.InputAttributeTypeEmail, node.WithRequiredInputAttribute).WithMetaLabel(text.NewInfoNodeInputEmail()),
+			node.NewInputField("email", email, node.LinkGroup, node.InputAttributeTypeEmail, node.WithRequiredInputAttribute).WithMetaLabel(text.NewInfoNodeInputForChannel(identity.AddressTypeEmail)),
 		)
 	}
 
@@ -140,7 +140,7 @@ func (s *Strategy) Verify(w http.ResponseWriter, r *http.Request, f *verificatio
 	f.TransientPayload = body.TransientPayload
 
 	if len(body.Token) > 0 {
-		if err := flow.MethodEnabledAndAllowed(ctx, f.GetFlowName(), s.VerificationStrategyID(), s.VerificationStrategyID(), s.d); err != nil {
+		if err = flow.MethodEnabledAndAllowed(ctx, f.GetFlowName(), s.VerificationStrategyID(), s.VerificationStrategyID(), s.d); err != nil {
 			return s.handleVerificationError(r, nil, body, err)
 		}
 
@@ -189,12 +189,12 @@ func (s *Strategy) verificationHandleFormSubmission(ctx context.Context, r *http
 	f.UI.SetCSRF(s.d.GenerateCSRFToken(r))
 	f.UI.GetNodes().Upsert(
 		// v0.5: form.Field{Name: "email", Type: "email", Required: true, Value: body.Body.Email}
-		node.NewInputField("email", body.Email, node.LinkGroup, node.InputAttributeTypeEmail, node.WithRequiredInputAttribute).WithMetaLabel(text.NewInfoNodeInputEmail()),
+		node.NewInputField("email", body.Email, node.LinkGroup, node.InputAttributeTypeEmail, node.WithRequiredInputAttribute).WithMetaLabel(text.NewInfoNodeInputForChannel(identity.AddressTypeEmail)),
 	)
 
 	f.Active = sqlxx.NullString(s.NodeGroup())
 	f.State = flow.StateEmailSent
-	f.UI.Messages.Set(text.NewVerificationEmailSent())
+	f.UI.Messages.Set(text.NewVerificationCodeSent(identity.AddressTypeEmail, s.VerificationStrategyID()))
 	if err := s.d.VerificationFlowPersister().UpdateVerificationFlow(ctx, f); err != nil {
 		return s.handleVerificationError(r, f, body, err)
 	}
@@ -245,7 +245,7 @@ func (s *Strategy) verificationUseToken(ctx context.Context, w http.ResponseWrit
 	f.State = flow.StatePassedChallenge
 	// See https://github.com/ory/kratos/issues/1547
 	f.SetCSRFToken(flow.GetCSRFToken(s.d, w, r, f.Type))
-	f.UI.Messages.Set(text.NewInfoSelfServiceVerificationSuccessful())
+	f.UI.Messages.Set(text.NewInfoSelfServiceVerificationSuccessful(token.VerifiableAddress.Via))
 	f.UI.
 		Nodes.
 		Append(node.NewAnchorField("continue", returnTo.String(), node.LinkGroup, text.NewInfoNodeLabelContinue()).
@@ -317,7 +317,7 @@ func (s *Strategy) retryVerificationFlowWithError(ctx context.Context, w http.Re
 	return errors.WithStack(flow.ErrCompletedByStrategy)
 }
 
-func (s *Strategy) SendVerificationEmail(ctx context.Context, f *verification.Flow, i *identity.Identity, a *identity.VerifiableAddress) error {
+func (s *Strategy) SendVerificationCode(ctx context.Context, f *verification.Flow, i *identity.Identity, a *identity.VerifiableAddress) error {
 	token := NewSelfServiceVerificationToken(a, f, s.d.Config().SelfServiceLinkMethodLifespan(ctx))
 	if err := s.d.VerificationTokenPersister().CreateVerificationToken(ctx, token); err != nil {
 		return err

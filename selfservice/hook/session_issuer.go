@@ -114,7 +114,7 @@ func (e *SessionIssuer) executePostRegistrationPostPersistHook(w http.ResponseWr
 	return nil
 }
 
-func (e *SessionIssuer) acceptLoginChallenge(ctx context.Context, registrationFlow *registration.Flow, s *session.Session, i *identity.Identity) error {
+func (e *SessionIssuer) acceptLoginChallenge(ctx context.Context, registrationFlow *registration.Flow, s *session.Session, ident *identity.Identity) error {
 	// If Kratos is used as a Hydra login provider, we need to redirect back to Hydra by using the continue_with items
 	// with the post login challenge URL as the body.
 	// We only do this if the flow did not create a verification flow (e.g. verification is disabled or not active due to it being a code flow).
@@ -123,14 +123,14 @@ func (e *SessionIssuer) acceptLoginChallenge(ctx context.Context, registrationFl
 		postChallengeURL, err := e.r.Hydra().AcceptLoginRequest(ctx,
 			hydra.AcceptLoginRequestParams{
 				LoginChallenge:        string(registrationFlow.OAuth2LoginChallenge),
-				IdentityID:            i.ID.String(),
+				IdentityID:            ident.ID.String(),
 				SessionID:             s.ID.String(),
 				AuthenticationMethods: s.AMR,
 			})
 		if err != nil {
 			return err
 		}
-		cw := []flow.ContinueWith{}
+		cw := make([]flow.ContinueWith, 0)
 		for _, i := range registrationFlow.ContinueWithItems {
 			// Filter any continueWithRedirectBrowserTo items out of the list
 			// We will add a new one at the end of the flow
