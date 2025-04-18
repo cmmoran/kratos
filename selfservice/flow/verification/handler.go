@@ -104,7 +104,8 @@ func (h *Handler) NewVerificationFlow(w http.ResponseWriter, r *http.Request, ft
 		return nil, err
 	}
 
-	f, err := NewFlow(h.d.Config(), h.d.Config().SelfServiceFlowVerificationRequestLifespan(r.Context()), h.d.GenerateCSRFToken(r), r, strategy, ft)
+	var f *Flow
+	f, err = NewFlow(h.d.Config(), h.d.Config().SelfServiceFlowVerificationRequestLifespan(r.Context()), h.d.GenerateCSRFToken(r), r, strategy, ft)
 	if err != nil {
 		return nil, err
 	}
@@ -112,11 +113,11 @@ func (h *Handler) NewVerificationFlow(w http.ResponseWriter, r *http.Request, ft
 		o(f)
 	}
 
-	if err := h.d.VerificationExecutor().PreVerificationHook(w, r, f); err != nil {
+	if err = h.d.VerificationExecutor().PreVerificationHook(w, r, f); err != nil {
 		return nil, err
 	}
 
-	if err := h.d.VerificationFlowPersister().CreateVerificationFlow(r.Context(), f); err != nil {
+	if err = h.d.VerificationFlowPersister().CreateVerificationFlow(r.Context(), f); err != nil {
 		return nil, err
 	}
 
@@ -194,7 +195,7 @@ type createBrowserVerificationFlow struct {
 // This endpoint initializes a browser-based account verification flow. Once initialized, the browser will be redirected to
 // `selfservice.flows.verification.ui_url` with the flow ID set as the query parameter `?flow=`.
 //
-// If this endpoint is called via an AJAX request, the response contains the recovery flow without any redirects.
+// If this endpoint is called via an AJAX request, the response contains the verification flow without any redirects.
 //
 // This endpoint is NOT INTENDED for API clients and only works with browsers (Chrome, Firefox, ...).
 //
@@ -376,7 +377,7 @@ type updateVerificationFlowBody struct{}
 // Use this endpoint to complete a verification flow. This endpoint
 // behaves differently for API and browser flows and has several states:
 //
-//   - `choose_method` expects `flow` (in the URL query) and `email` (in the body) to be sent
+//   - `choose_method` expects `flow` (in the URL query) and `email` OR `sms` (in the body) to be sent
 //     and works with API- and Browser-initiated flows.
 //   - For API clients and Browser clients with HTTP Header `Accept: application/json` it either returns a HTTP 200 OK when the form is valid and HTTP 400 OK when the form is invalid
 //     and a HTTP 303 See Other redirect with a fresh verification flow if the flow was otherwise invalid (e.g. expired).
@@ -435,7 +436,7 @@ func (h *Handler) updateVerificationFlow(w http.ResponseWriter, r *http.Request,
 			continue
 		}
 
-		err := ss.Verify(w, r, f)
+		err = ss.Verify(w, r, f)
 		if errors.Is(err, flow.ErrStrategyNotResponsible) {
 			continue
 		} else if errors.Is(err, flow.ErrCompletedByStrategy) {

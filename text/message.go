@@ -44,6 +44,15 @@ func (h *Messages) Clear() Messages {
 	return *h
 }
 
+func (h *Messages) Contains(id ID) bool {
+	for _, m := range *h {
+		if m.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 // swagger:model uiText
 type Message struct {
 	// The message ID.

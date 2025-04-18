@@ -633,7 +633,7 @@
         "type": "object"
       },
       "continueWithSetOrySessionToken": {
-        "description": "Indicates that a session was issued, and the application should use this token for authenticated requests",
+        "description": "ContinueWithSetOrySessionToken Indicates that a session was issued, and the application should use this token for authenticated requests",
         "properties": {
           "action": {
             "description": "Action will always be `set_ory_session_token`\nset_ory_session_token ContinueWithActionSetOrySessionTokenString",
@@ -3449,7 +3449,7 @@
         "type": "object"
       },
       "updateRegistrationFlowWithPasswordMethod": {
-        "description": "Update Registration Flow with Password Method",
+        "description": "UpdateRegistrationFlowWithPasswordMethod Update Registration Flow with Password Method",
         "properties": {
           "csrf_token": {
             "description": "The CSRF Token",
@@ -3928,7 +3928,7 @@
       "updateVerificationFlowWithCodeMethod": {
         "properties": {
           "code": {
-            "description": "Code from the recovery email\n\nIf you want to submit a code, use this field, but make sure to _not_ include the email field, as well.",
+            "description": "Code from the verification email\n\nIf you want to submit a code, use this field, but make sure to _not_ include the email field, as well.",
             "type": "string"
           },
           "csrf_token": {
@@ -3936,7 +3936,7 @@
             "type": "string"
           },
           "email": {
-            "description": "The email address to verify\n\nIf the email belongs to a valid account, a verifiation email will be sent.\n\nIf you want to notify the email address if the account does not exist, see\nthe [notify_unknown_recipients flag](https://www.ory.sh/docs/kratos/self-service/flows/verify-email-account-activation#attempted-verification-notifications)\n\nIf a code was already sent, including this field in the payload will invalidate the sent code and re-send a new code.\n\nformat: email",
+            "description": "Email address to verify\n\nIf the email belongs to a valid account, a verification email will be sent.\n\nIf you want to notify the email address if the account does not exist, see\nthe [notify_unknown_recipients flag](https://www.ory.sh/docs/kratos/self-service/flows/verify-email-account-activation#attempted-verification-notifications)\n\nIf a code was already sent, including this field in the payload will invalidate the sent code and re-send a new code.\n\nformat: email",
             "type": "string"
           },
           "method": {
@@ -3947,6 +3947,10 @@
             ],
             "type": "string",
             "x-go-enum-desc": "link VerificationStrategyLink\ncode VerificationStrategyCode"
+          },
+          "sms": {
+            "description": "PhoneNumber to verify\n\nIf the phone number belongs to a valid account, a verification sms will be sent.\n\nIf you want to notify the phone number if the account does not exist, see\nthe [notify_unknown_recipients flag](https://www.ory.sh/docs/kratos/self-service/flows/verify-email-account-activation#attempted-verification-notifications)\n\nIf a code was already sent, including this field in the payload will invalidate the sent code and re-send a new code.\n\nformat: tel",
+            "type": "string"
           },
           "transient_payload": {
             "description": "Transient data to pass along to any webhooks",
@@ -3992,6 +3996,11 @@
       "verifiableIdentityAddress": {
         "description": "VerifiableAddress is an identity's verifiable address",
         "properties": {
+          "active_verification_flow": {
+            "description": "ActiveVerificationFlow represents the active verification flow for this address\nThis is a resolved field based on the verification codes and flows",
+            "format": "uuid",
+            "type": "string"
+          },
           "created_at": {
             "description": "When this entry was created",
             "example": "2014-01-01T23:28:56.782Z",
@@ -4092,7 +4101,7 @@
           "ui",
           "state"
         ],
-        "title": "A Verification Flow",
+        "title": "Flow A Verification Flow",
         "type": "object"
       },
       "verificationFlowState": {
@@ -7637,7 +7646,7 @@
     },
     "/self-service/verification": {
       "post": {
-        "description": "Use this endpoint to complete a verification flow. This endpoint\nbehaves differently for API and browser flows and has several states:\n\n`choose_method` expects `flow` (in the URL query) and `email` (in the body) to be sent\nand works with API- and Browser-initiated flows.\nFor API clients and Browser clients with HTTP Header `Accept: application/json` it either returns a HTTP 200 OK when the form is valid and HTTP 400 OK when the form is invalid\nand a HTTP 303 See Other redirect with a fresh verification flow if the flow was otherwise invalid (e.g. expired).\nFor Browser clients without HTTP Header `Accept` or with `Accept: text/*` it returns a HTTP 303 See Other redirect to the Verification UI URL with the Verification Flow ID appended.\n`sent_email` is the success state after `choose_method` when using the `link` method and allows the user to request another verification email. It\nworks for both API and Browser-initiated flows and returns the same responses as the flow in `choose_method` state.\n`passed_challenge` expects a `token` to be sent in the URL query and given the nature of the flow (\"sending a verification link\")\ndoes not have any API capabilities. The server responds with a HTTP 303 See Other redirect either to the Settings UI URL\n(if the link was valid) and instructs the user to update their password, or a redirect to the Verification UI URL with\na new Verification Flow ID which contains an error message that the verification link was invalid.\n\nMore information can be found at [Ory Kratos Email and Phone Verification Documentation](https://www.ory.sh/docs/kratos/self-service/flows/verify-email-account-activation).",
+        "description": "Use this endpoint to complete a verification flow. This endpoint\nbehaves differently for API and browser flows and has several states:\n\n`choose_method` expects `flow` (in the URL query) and `email` OR `sms` (in the body) to be sent\nand works with API- and Browser-initiated flows.\nFor API clients and Browser clients with HTTP Header `Accept: application/json` it either returns a HTTP 200 OK when the form is valid and HTTP 400 OK when the form is invalid\nand a HTTP 303 See Other redirect with a fresh verification flow if the flow was otherwise invalid (e.g. expired).\nFor Browser clients without HTTP Header `Accept` or with `Accept: text/*` it returns a HTTP 303 See Other redirect to the Verification UI URL with the Verification Flow ID appended.\n`sent_email` is the success state after `choose_method` when using the `link` method and allows the user to request another verification email. It\nworks for both API and Browser-initiated flows and returns the same responses as the flow in `choose_method` state.\n`passed_challenge` expects a `token` to be sent in the URL query and given the nature of the flow (\"sending a verification link\")\ndoes not have any API capabilities. The server responds with a HTTP 303 See Other redirect either to the Settings UI URL\n(if the link was valid) and instructs the user to update their password, or a redirect to the Verification UI URL with\na new Verification Flow ID which contains an error message that the verification link was invalid.\n\nMore information can be found at [Ory Kratos Email and Phone Verification Documentation](https://www.ory.sh/docs/kratos/self-service/flows/verify-email-account-activation).",
         "operationId": "updateVerificationFlow",
         "parameters": [
           {
@@ -7787,7 +7796,7 @@
     },
     "/self-service/verification/browser": {
       "get": {
-        "description": "This endpoint initializes a browser-based account verification flow. Once initialized, the browser will be redirected to\n`selfservice.flows.verification.ui_url` with the flow ID set as the query parameter `?flow=`.\n\nIf this endpoint is called via an AJAX request, the response contains the recovery flow without any redirects.\n\nThis endpoint is NOT INTENDED for API clients and only works with browsers (Chrome, Firefox, ...).\n\nMore information can be found at [Ory Kratos Email and Phone Verification Documentation](https://www.ory.sh/docs/kratos/self-service/flows/verify-email-account-activation).",
+        "description": "This endpoint initializes a browser-based account verification flow. Once initialized, the browser will be redirected to\n`selfservice.flows.verification.ui_url` with the flow ID set as the query parameter `?flow=`.\n\nIf this endpoint is called via an AJAX request, the response contains the verification flow without any redirects.\n\nThis endpoint is NOT INTENDED for API clients and only works with browsers (Chrome, Firefox, ...).\n\nMore information can be found at [Ory Kratos Email and Phone Verification Documentation](https://www.ory.sh/docs/kratos/self-service/flows/verify-email-account-activation).",
         "operationId": "createBrowserVerificationFlow",
         "parameters": [
           {

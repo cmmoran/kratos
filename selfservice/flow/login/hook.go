@@ -166,7 +166,9 @@ func (e *HookExecutor) PostLoginHook(
 	})...)
 
 	if f.Type == flow.TypeBrowser && x.IsJSONRequest(r) {
+		e.d.Audit().WithRequest(r).WithField("identity_id", i.ID).WithField("continue_with", f.ContinueWith()).Info("Adding post login flow continue_with")
 		f.AddContinueWith(flow.NewContinueWithRedirectBrowserTo(returnTo.String()))
+		e.d.Audit().WithRequest(r).WithField("identity_id", i.ID).WithField("continue_with", f.ContinueWith()).Info("Add post login flow continue_with")
 	}
 
 	classified := s
@@ -375,6 +377,11 @@ func (e *HookExecutor) PostLoginHook(
 	} else if f.ReturnToVerification != "" {
 		finalReturnTo = f.ReturnToVerification
 		span.SetAttributes(attribute.String("redirect_reason", "verification requested"))
+	}
+	if x.IsBrowserRequest(r) && f.HasContinueWithRedirect() {
+		e.d.Audit().WithField("continue_with", f.ContinueWith()).WithField("identity_id", i.ID).WithField("flow_method", f.Active).Info("Redirecting to continue_with.")
+		x.ContentNegotiationRedirection(w, r, s, e.d.Writer(), f.ContinueWithRedirect().RedirectUrl())
+		return nil
 	}
 
 	x.ContentNegotiationRedirection(w, r, s, e.d.Writer(), finalReturnTo)

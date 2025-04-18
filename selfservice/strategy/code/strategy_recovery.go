@@ -40,7 +40,7 @@ func (s *Strategy) PopulateRecoveryMethod(r *http.Request, f *recovery.Flow) err
 	f.UI.SetCSRF(s.deps.GenerateCSRFToken(r))
 	f.UI.GetNodes().Upsert(
 		node.NewInputField("email", nil, node.CodeGroup, node.InputAttributeTypeEmail, node.WithRequiredInputAttribute).
-			WithMetaLabel(text.NewInfoNodeInputEmail()),
+			WithMetaLabel(text.NewInfoNodeInputForChannel(identity.AddressTypeEmail)),
 	)
 	f.UI.
 		GetNodes().
@@ -422,7 +422,7 @@ func (s *Strategy) recoveryHandleFormSubmission(w http.ResponseWriter, r *http.R
 			WithMetaLabel(text.NewInfoNodeLabelContinue()))
 
 	f.UI.Nodes.Append(node.NewInputField("email", body.Email, node.CodeGroup, node.InputAttributeTypeSubmit).
-		WithMetaLabel(text.NewInfoNodeResendOTP()),
+		WithMetaLabel(text.NewInfoNodeResendCodeVia(identity.AddressTypeEmail)),
 	)
 	if err := s.deps.RecoveryFlowPersister().UpdateRecoveryFlow(r.Context(), f); err != nil {
 		return s.HandleRecoveryError(w, r, f, body, err)
@@ -456,7 +456,7 @@ func (s *Strategy) HandleRecoveryError(w http.ResponseWriter, r *http.Request, f
 		flow.UI.SetCSRF(s.deps.GenerateCSRFToken(r))
 		flow.UI.GetNodes().Upsert(
 			node.NewInputField("email", email, node.CodeGroup, node.InputAttributeTypeEmail, node.WithRequiredInputAttribute).
-				WithMetaLabel(text.NewInfoNodeInputEmail()),
+				WithMetaLabel(text.NewInfoNodeInputForChannel(identity.AddressTypeEmail)),
 		)
 	}
 

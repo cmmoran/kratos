@@ -153,6 +153,14 @@ func (c *Container) ResetMessages(exclude ...string) {
 	}
 }
 
+func (c *Container) HasMessageId(id text.ID) bool {
+	if c.Messages == nil {
+		return false
+	}
+
+	return c.Messages.Contains(id)
+}
+
 // Reset resets the container's errors as well as each field's value and errors.
 func (c *Container) Reset(exclude ...string) {
 	c.Messages = nil

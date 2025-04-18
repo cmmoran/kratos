@@ -19,7 +19,7 @@ import (
 // checks if the UpdateRegistrationFlowWithPasswordMethod type satisfies the MappedNullable interface at compile time
 var _ MappedNullable = &UpdateRegistrationFlowWithPasswordMethod{}
 
-// UpdateRegistrationFlowWithPasswordMethod Update Registration Flow with Password Method
+// UpdateRegistrationFlowWithPasswordMethod UpdateRegistrationFlowWithPasswordMethod Update Registration Flow with Password Method
 type UpdateRegistrationFlowWithPasswordMethod struct {
 	// The CSRF Token
 	CsrfToken *string `json:"csrf_token,omitempty"`

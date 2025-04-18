@@ -19,7 +19,7 @@ import (
 // checks if the ContinueWithSetOrySessionToken type satisfies the MappedNullable interface at compile time
 var _ MappedNullable = &ContinueWithSetOrySessionToken{}
 
-// ContinueWithSetOrySessionToken Indicates that a session was issued, and the application should use this token for authenticated requests
+// ContinueWithSetOrySessionToken ContinueWithSetOrySessionToken Indicates that a session was issued, and the application should use this token for authenticated requests
 type ContinueWithSetOrySessionToken struct {
 	// Action will always be `set_ory_session_token` set_ory_session_token ContinueWithActionSetOrySessionTokenString
 	Action string `json:"action"`

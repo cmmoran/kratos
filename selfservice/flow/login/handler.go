@@ -241,7 +241,7 @@ preLoginHook:
 		}
 	}
 
-	if sess != nil && f.RequestedAAL > sess.AuthenticatorAssuranceLevel && f.RequestedAAL > identity.AuthenticatorAssuranceLevel1 {
+	if sess != nil && f.RequestedAAL > sess.AuthenticatorAssuranceLevel && f.RequestedAAL > identity.AuthenticatorAssuranceLevel1 && !f.Refresh {
 		f.UI.Messages.Add(text.NewInfoLoginMFA())
 	} else if f.Refresh {
 		f.UI.Messages.Set(text.NewInfoLoginReAuth())
@@ -877,8 +877,9 @@ continueLogin:
 		return
 	}
 
-	if err := h.d.LoginHookExecutor().PostLoginHook(w, r, group, f, i, sess, ""); err != nil {
+	if err = h.d.LoginHookExecutor().PostLoginHook(w, r, group, f, i, sess, ""); err != nil {
 		if errors.Is(err, ErrAddressNotVerified) {
+			h.d.Logger().WithRequest(r).WithError(err).Warn("The user's address was not verified, but the login hook requested a redirect.")
 			h.d.LoginFlowErrorHandler().WriteFlowError(w, r, f, node.DefaultGroup, errors.WithStack(schema.NewAddressNotVerifiedError()))
 			return
 		}

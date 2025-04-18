@@ -859,10 +859,13 @@ func (m *RegistryDefault) PrometheusManager() *prometheus.MetricsManager {
 
 func (m *RegistryDefault) HTTPClient(ctx context.Context, opts ...httpx.ResilientOptions) *retryablehttp.Client {
 	l := m.Logger()
-	corrIdRaw := ctx.Value("x-correlation-id")
-	if corrIdRaw != nil {
-		if corrId := corrIdRaw.(string); corrId != "" {
-			l = l.WithField("x-correlation-id", corrId)
+	fields := []string{"x-correlation-id", "x-session-entropy"}
+	for _, f := range fields {
+		fRaw := ctx.Value(f)
+		if fRaw != nil {
+			if fVal := fRaw.(string); fVal != "" {
+				l = l.WithField(f, fVal)
+			}
 		}
 	}
 	opts = append(opts,

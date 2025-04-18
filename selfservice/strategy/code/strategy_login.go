@@ -7,7 +7,9 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -239,7 +241,7 @@ func (s *Strategy) Login(w http.ResponseWriter, r *http.Request, f *login.Flow, 
 			return nil, s.HandleLoginError(r, f, &p, err, false)
 		}
 		return nil, nil
-	case flow.StateEmailSent:
+	case flow.StateEmailSent, flow.StateSmsSent:
 		i, err := s.loginVerifyCode(ctx, f, &p, sess)
 		if err != nil {
 			return nil, s.HandleLoginError(r, f, &p, err, true)
@@ -388,7 +390,7 @@ func (s *Strategy) findIdentityForIdentifier(ctx context.Context, identifier str
 		)
 
 		var conf identity.CredentialsCode
-		if err := json.Unmarshal(cred.Config, &conf); err != nil {
+		if err = json.Unmarshal(cred.Config, &conf); err != nil {
 			return nil, nil, errors.WithStack(err)
 		}
 
@@ -423,20 +425,29 @@ func (s *Strategy) loginSendCode(ctx context.Context, w http.ResponseWriter, r *
 	}
 
 	// Step 2: Delete any previous login codes for this flow ID
-	if err := s.deps.LoginCodePersister().DeleteLoginCodesOfFlow(ctx, f.GetID()); err != nil {
+	if err = s.deps.LoginCodePersister().DeleteLoginCodesOfFlow(ctx, f.GetID()); err != nil {
 		return errors.WithStack(err)
 	}
 
-	// kratos only supports `email` identifiers at the moment with the code method
-	// this is validated in the identity validation step above
-	if err := s.deps.CodeSender().SendCode(ctx, f, i, addresses...); err != nil {
+	if err = s.deps.CodeSender().SendCode(ctx, f, i, addresses...); err != nil {
 		return errors.WithStack(err)
 	}
 
+	// addresses is an array but they should all be the same _via_
 	// sets the flow state to code sent
-	f.SetState(flow.NextState(f.GetState()))
+	via := addresses[0].Via
+	f.SetState(flow.NextState(f.GetState(), string(via)))
 
-	if err := s.NewCodeUINodes(r, f, &codeIdentifier{Identifier: p.Identifier}); err != nil {
+	// we're only interested in keeping the address(es) we just sent the code to
+	for _, n := range f.GetUI().Nodes {
+		if n.ID() == "address" && !slices.ContainsFunc(addresses, func(addr Address) bool {
+			return addr.To == x.GracefulNormalization(fmt.Sprintf("%v", n.GetValue()))
+		}) {
+			f.GetUI().Nodes.RemoveMatching(n)
+		}
+	}
+
+	if err = s.NewCodeUINodes(r, f, &codeIdentifier{Identifier: p.Identifier}); err != nil {
 		return err
 	}
 
@@ -509,7 +520,8 @@ func (s *Strategy) loginVerifyCode(ctx context.Context, f *login.Flow, p *update
 
 	// since nothing has errored yet, we can assume that the code is correct
 	// and we can update the login flow
-	f.SetState(flow.NextState(f.GetState()))
+	via := loginCode.AddressType
+	f.SetState(flow.NextState(f.GetState(), string(via)))
 
 	if err := s.deps.LoginFlowPersister().UpdateLoginFlow(ctx, f); err != nil {
 		return nil, errors.WithStack(err)

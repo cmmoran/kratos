@@ -28,7 +28,7 @@ const (
 
 var _ ContinueWith = new(ContinueWithSetOrySessionToken)
 
-// Indicates that a session was issued, and the application should use this token for authenticated requests
+// ContinueWithSetOrySessionToken Indicates that a session was issued, and the application should use this token for authenticated requests
 //
 // swagger:model continueWithSetOrySessionToken
 type ContinueWithSetOrySessionToken struct {
@@ -86,6 +86,10 @@ func (c ContinueWithVerificationUI) GetAction() string {
 	return string(c.Action)
 }
 
+func (c ContinueWithVerificationUI) RedirectUrl() string {
+	return c.Flow.URL
+}
+
 // swagger:model continueWithVerificationUiFlow
 type ContinueWithVerificationUIFlow struct {
 	// The ID of the verification flow
@@ -127,6 +131,8 @@ type FlowWithContinueWith interface {
 	Flow
 	AddContinueWith(ContinueWith)
 	ContinueWith() []ContinueWith
+	HasContinueWithRedirect() bool
+	ContinueWithRedirect() ContinueWithRedirect
 }
 
 // swagger:enum ContinueWithActionShowSettingsUI
@@ -156,6 +162,10 @@ type ContinueWithSettingsUI struct {
 
 func (c ContinueWithSettingsUI) GetAction() string {
 	return string(c.Action)
+}
+
+func (c ContinueWithSettingsUI) RedirectUrl() string {
+	return c.Flow.URL
 }
 
 // swagger:model continueWithSettingsUiFlow
@@ -233,6 +243,10 @@ func (c ContinueWithRecoveryUI) GetAction() string {
 	return string(c.Action)
 }
 
+func (c ContinueWithRecoveryUI) RedirectUrl() string {
+	return c.Flow.URL
+}
+
 // swagger:enum ContinueWithActionRedirectBrowserTo
 type ContinueWithActionRedirectBrowserTo string
 
@@ -267,6 +281,10 @@ func (c ContinueWithRedirectBrowserTo) GetAction() string {
 	return string(c.Action)
 }
 
+func (c ContinueWithRedirectBrowserTo) RedirectUrl() string {
+	return c.RedirectTo
+}
+
 func ErrorWithContinueWith(err *herodot.DefaultError, continueWith ...ContinueWith) *herodot.DefaultError {
 	if err.DetailsField == nil {
 		err.DetailsField = map[string]interface{}{}
@@ -274,4 +292,8 @@ func ErrorWithContinueWith(err *herodot.DefaultError, continueWith ...ContinueWi
 	err.DetailsField["continue_with"] = continueWith
 
 	return err
+}
+
+type ContinueWithRedirect interface {
+	RedirectUrl() string
 }

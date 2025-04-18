@@ -86,7 +86,7 @@ func (s *Strategy) PopulateSettingsMethod(ctx context.Context, r *http.Request, 
 		return err
 	}
 	if hasCode {
-		s.deps.Audit().WithField("has_code", hasCode).Info("code credentials enabled for account")
+		s.deps.Audit().WithRequest(r).WithField("has_code", hasCode).Info("code credentials enabled for account")
 		var devices []session.Device
 		devices, err = s.deps.SessionPersister().ListTrustedDevicesByIdentityWithExpiration(ctx, i.ID, s.deps.Config().SecurityTrustDeviceDuration(ctx))
 		if err != nil {
@@ -98,7 +98,7 @@ func (s *Strategy) PopulateSettingsMethod(ctx context.Context, r *http.Request, 
 			f.UI.Nodes.Upsert(deviceNode)
 		}
 	} else {
-		s.deps.Audit().WithField("has_code", hasCode).Info("code credentials missing")
+		s.deps.Audit().WithRequest(r).WithField("has_code", hasCode).Info("code credentials missing")
 		f.UI.Nodes.Append(node.NewInputField(node.CodeEnable, "true", node.CodeGroup, node.InputAttributeTypeSubmit, node.WithRequiredInputAttribute).WithMetaLabel(text.NewInfoSelfServiceSettingsEnableMethod()))
 	}
 
