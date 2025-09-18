@@ -368,7 +368,7 @@ func (s *Strategy) populateCodeSentFlow(ctx context.Context, f flow.Flow) error 
 		codeMetaLabel = text.NewInfoNodeLabelRecoveryCode()
 		message = text.NewRecoveryEmailWithCodeSent()
 
-		resendNode = node.NewInputField("email", nil, node.CodeGroup, node.InputAttributeTypeEmail, node.WithRequiredInputAttribute).
+		resendNode = node.NewInputField(identity.AddressTypeEmail, nil, node.CodeGroup, node.InputAttributeTypeEmail, node.WithRequiredInputAttribute).
 			WithMetaLabel(text.NewInfoNodeResendCodeVia(identity.AddressTypeEmail))
 
 	case flow.VerificationFlow:
@@ -384,7 +384,7 @@ func (s *Strategy) populateCodeSentFlow(ctx context.Context, f flow.Flow) error 
 					input.Name = n.ID()
 				}
 				freshNodes = append(freshNodes, n)
-				if message == nil || n.HasValue() {
+				if n.Meta != nil && n.Meta.Label != nil && n.Meta.Label.Context != nil && (message == nil || n.HasValue()) {
 					if channel = gjson.GetBytes(n.Meta.Label.Context, "channel").String(); channel != "" {
 						message = text.NewVerificationCodeSent(channel, s.VerificationStrategyID())
 					}
@@ -407,17 +407,24 @@ func (s *Strategy) populateCodeSentFlow(ctx context.Context, f flow.Flow) error 
 					input.Name = "identifier"
 				}
 				freshNodes = append(freshNodes, n)
-				if message == nil || n.HasValue() {
+				if n.Meta != nil && n.Meta.Label != nil && n.Meta.Label.Context != nil && (message == nil || n.HasValue()) {
 					if channel = gjson.GetBytes(n.Meta.Label.Context, "channel").String(); channel != "" {
 						message = text.NewLoginCodeSent(channel)
 					}
 				}
 			}
 		}
+		if message == nil {
+			if f.GetState() == flow.StateEmailSent {
+				message = text.NewLoginCodeSent(identity.AddressTypeEmail)
+			} else if f.GetState() == flow.StateSmsSent {
+				message = text.NewLoginCodeSent(identity.AddressTypeSMS)
+			}
+		}
 
 		//@TODO: I do not like this hack
 		f.(*login.Flow).SetReturnTo()
-		if !f.(*login.Flow).Refresh && !strings.HasSuffix(f.(*login.Flow).ReturnTo, "/settings") {
+		if (f.(*login.Flow).OAuth2LoginChallenge != "" || f.(*login.Flow).HydraLoginRequest != nil || !f.(*login.Flow).Refresh) && !strings.HasSuffix(f.(*login.Flow).ReturnTo, "/settings") {
 			trustDeviceNode = node.NewInputField("trust_device", false, node.CodeGroup, node.InputAttributeTypeCheckbox).WithMetaLabel(text.NewInfoTrustDeviceLabel())
 		}
 
@@ -493,6 +500,7 @@ func (s *Strategy) populateCodeSentFlow(ctx context.Context, f flow.Flow) error 
 	f.GetUI().Action = flow.AppendFlowTo(urlx.AppendPaths(s.deps.Config().SelfPublicURL(ctx), route), f.GetID()).String()
 
 	f.GetUI().Messages.Set(message)
+
 	return nil
 }
 

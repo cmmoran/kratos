@@ -315,7 +315,10 @@ func (s *Strategy) verificationHandleFormSubmission(ctx context.Context, w http.
 			node.NewInputField(addr.Channel(), addr.To, node.CodeGroup, node.InputAttributeTypeSubmit).
 				WithMetaLabel(text.NewInfoNodeResendCodeVia(addr.Channel())),
 		)
+	}
 
+	if err := sortNodes(ctx, f.UI.Nodes); err != nil {
+		return s.handleVerificationError(r, f, body, err)
 	}
 
 	if err := s.deps.VerificationFlowPersister().UpdateVerificationFlow(ctx, f); err != nil {
@@ -374,11 +377,15 @@ func (s *Strategy) verificationUseCode(ctx context.Context, w http.ResponseWrite
 		Append(node.NewAnchorField("continue", returnTo.String(), node.CodeGroup, text.NewInfoNodeLabelContinue()).
 			WithMetaLabel(text.NewInfoNodeLabelContinue()))
 
-	if err := s.deps.VerificationFlowPersister().UpdateVerificationFlow(ctx, f); err != nil {
+	if err = sortNodes(ctx, f.GetUI().Nodes); err != nil {
+		return s.retryVerificationFlowWithError(ctx, w, r, f.Type, err)
+	}
+
+	if err = s.deps.VerificationFlowPersister().UpdateVerificationFlow(ctx, f); err != nil {
 		return s.retryVerificationFlowWithError(ctx, w, r, flow.TypeBrowser, err)
 	}
 
-	if err := s.deps.VerificationExecutor().PostVerificationHook(w, r, f, i); err != nil {
+	if err = s.deps.VerificationExecutor().PostVerificationHook(w, r, f, i); err != nil {
 		return s.retryVerificationFlowWithError(ctx, w, r, f.Type, err)
 	}
 

@@ -66,5 +66,7 @@ func sortNodes(ctx context.Context, n node.Nodes) error {
 		node.SortUseOrderAppend([]string{
 			"method",
 			"resend",
+			"email",
+			"sms",
 		}))
 }

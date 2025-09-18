@@ -270,7 +270,11 @@ func (n Nodes) SortBySchema(ctx context.Context, opts ...SortOption) error {
 		}
 		// Just kidding, if resend exists, it must be the last element in the list
 		if node.Attributes.ID() == "resend" {
-			return len(n) + len(o.keysInOrder) + 1
+			return len(n) + len(o.keysInOrder) + 2
+		}
+
+		if node.Attributes.ID() == "sms" || node.Attributes.ID() == "email" {
+			return len(n) + len(o.keysInOrder) + 3
 		}
 
 		for i, keyn := range o.keysInOrder {
