@@ -168,7 +168,7 @@ func MockSessionCreateHandlerWithIdentityAndAMR(t *testing.T, reg mockDeps, i *i
 		sess.CompletedLoginFor(m, "")
 	}
 
-	sess.SetAuthenticatorAssuranceLevel()
+	sess.SetAuthenticatorAssuranceLevel("")
 
 	if _, err := reg.Config().DefaultIdentityTraitsSchemaURL(t.Context()); err != nil {
 		SetDefaultIdentitySchema(reg.Config(), "file://./stub/fake-session.schema.json")

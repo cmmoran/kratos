@@ -126,6 +126,7 @@ const (
 	ViperKeySelfServiceLoginUI                               = "selfservice.flows.login.ui_url"
 	ViperKeySelfServiceLoginFlowStyle                        = "selfservice.flows.login.style"
 	ViperKeySecurityAccountEnumerationMitigate               = "security.account_enumeration.mitigate"
+	ViperKeySecurityTrustDeviceDuration                      = "security.trust_device.duration"
 	ViperKeySelfServiceLoginRequestLifespan                  = "selfservice.flows.login.lifespan"
 	ViperKeySelfServiceLoginAfter                            = "selfservice.flows.login.after"
 	ViperKeySelfServiceLoginBeforeHooks                      = "selfservice.flows.login.before.hooks"
@@ -170,6 +171,7 @@ const (
 	ViperKeyDatabaseCleanupBatchSize                         = "database.cleanup.batch_size"
 	ViperKeyLinkLifespan                                     = "selfservice.methods.link.config.lifespan"
 	ViperKeyCodeLifespan                                     = "selfservice.methods.code.config.lifespan"
+	ViperKeyCodeMfaLifespan                                  = "selfservice.methods.code.config.mfa_lifespan"
 	ViperKeyCodeMaxSubmissions                               = "selfservice.methods.code.config.max_submissions"
 	ViperKeyCodeConfigMissingCredentialFallbackEnabled       = "selfservice.methods.code.config.missing_credential_fallback_enabled"
 	ViperKeyPasswordHaveIBeenPwnedHost                       = "selfservice.methods.password.config.haveibeenpwned_host"
@@ -204,6 +206,7 @@ const (
 
 const (
 	HighestAvailableAAL                 = "highest_available"
+	DeviceTrustBasedAAL                 = "device_trust_based"
 	Argon2DefaultMemory                 = 128 * bytesize.MB
 	Argon2DefaultIterations      uint32 = 1
 	Argon2DefaultSaltLength      uint32 = 16
@@ -472,21 +475,27 @@ func (p *Config) validateIdentitySchemas(ctx context.Context) error {
 		return err
 	}
 
+	closers := make([]io.Closer, 0)
+	defer func() {
+		for _, c := range closers {
+			_ = c.Close()
+		}
+	}()
 	for _, s := range ss {
-		resource, err := jsonschema.LoadURL(ctx, s.URL)
-		if err != nil {
-			return errors.WithStack(err)
+		resource, rerr := jsonschema.LoadURL(ctx, s.URL)
+		if rerr != nil {
+			return errors.WithStack(rerr)
 		}
-		defer func() { _ = resource.Close() }()
+		closers = append(closers, resource)
 
-		schema, err := io.ReadAll(io.LimitReader(resource, 1024*1024))
-		if err != nil {
-			return errors.WithStack(err)
+		schema, rerr := io.ReadAll(io.LimitReader(resource, 1024*1024))
+		if rerr != nil {
+			return errors.WithStack(rerr)
 		}
 
-		if err = j.Validate(bytes.NewBuffer(schema)); err != nil {
-			p.formatJsonErrors(schema, err)
-			return errors.WithStack(err)
+		if rerr = j.Validate(bytes.NewBuffer(schema)); rerr != nil {
+			p.formatJsonErrors(schema, rerr)
+			return errors.WithStack(rerr)
 		}
 	}
 	return nil
@@ -1605,4 +1614,12 @@ func (p *Config) SelfServiceLoginFlowIdentifierFirstEnabled(ctx context.Context)
 
 func (p *Config) SecurityAccountEnumerationMitigate(ctx context.Context) bool {
 	return p.GetProvider(ctx).Bool(ViperKeySecurityAccountEnumerationMitigate)
+}
+
+func (p *Config) SecurityTrustDeviceDuration(ctx context.Context) time.Duration {
+	return p.GetProvider(ctx).DurationF(ViperKeySecurityTrustDeviceDuration, time.Hour*24*30)
+}
+
+func (p *Config) SelfServiceCodeMethodMfaLifespan(ctx context.Context) time.Duration {
+	return p.GetProvider(ctx).DurationF(ViperKeyCodeMfaLifespan, time.Minute*10)
 }

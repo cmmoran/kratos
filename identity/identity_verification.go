@@ -76,6 +76,10 @@ type VerifiableAddress struct {
 	// IdentityID is a helper struct field for gobuffalo.pop.
 	IdentityID uuid.UUID `json:"-" faker:"-" db:"identity_id"`
 	NID        uuid.UUID `json:"-"  faker:"-" db:"nid"`
+
+	// ActiveVerificationFlow represents the active verification flow for this address
+	// This is a resolved field based on the verification codes and flows
+	ActiveVerificationFlow *uuid.UUID `json:"active_verification_flow,omitempty" faker:"-" db:"-"`
 }
 
 func (a VerifiableAddress) TableName() string {

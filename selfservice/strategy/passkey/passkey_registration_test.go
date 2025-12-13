@@ -18,6 +18,12 @@ import (
 
 	"github.com/ory/x/configx"
 
+	"github.com/ory/x/assertx"
+	"github.com/ory/x/contextx"
+	"github.com/ory/x/randx"
+	"github.com/ory/x/snapshotx"
+	"github.com/ory/x/sqlxx"
+
 	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/pkg"
@@ -27,11 +33,6 @@ import (
 	"github.com/ory/kratos/selfservice/flow/registration"
 	"github.com/ory/kratos/text"
 	"github.com/ory/kratos/ui/node"
-	"github.com/ory/x/assertx"
-	"github.com/ory/x/contextx"
-	"github.com/ory/x/randx"
-	"github.com/ory/x/snapshotx"
-	"github.com/ory/x/sqlxx"
 )
 
 var (

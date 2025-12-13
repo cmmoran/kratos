@@ -26,5 +26,9 @@ func sortNodes(ctx context.Context, n node.Nodes) error {
 			"identifier",
 			"password",
 		}),
+		node.SortUseOrderAppend([]string{
+			"method",
+			"resend",
+		}),
 	)
 }

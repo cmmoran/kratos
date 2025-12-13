@@ -26,7 +26,7 @@ import (
 	"github.com/ory/x/urlx"
 )
 
-// A Verification Flow
+// Flow A Verification Flow
 //
 // Used to verify an out-of-band communication
 // channel such as an email address or a phone number.
@@ -145,7 +145,7 @@ func NewFlow(conf *config.Config, exp time.Duration, csrf string, r *http.Reques
 
 	if strategy != nil {
 		f.Active = sqlxx.NullString(strategy.NodeGroup())
-		if err := strategy.PopulateVerificationMethod(r, f); err != nil {
+		if err = strategy.PopulateVerificationMethod(r, f); err != nil {
 			return nil, err
 		}
 	}
@@ -229,6 +229,10 @@ func (f Flow) MarshalJSON() ([]byte, error) {
 }
 
 func (f *Flow) SetReturnTo() {
+	// Return to is already set, do not overwrite it.
+	if len(f.ReturnTo) > 0 {
+		return
+	}
 	if u, err := url.Parse(f.RequestURL); err == nil {
 		f.ReturnTo = u.Query().Get("return_to")
 	}

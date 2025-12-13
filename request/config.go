@@ -4,7 +4,9 @@
 package request
 
 import (
+	"encoding/json"
 	"net/http"
+	"strings"
 )
 
 type (
@@ -31,3 +33,34 @@ type (
 		header http.Header
 	}
 )
+
+func (c *Config) UnmarshalJSON(raw []byte) error {
+	type Alias Config
+	var a Alias
+	err := json.Unmarshal(raw, &a)
+	if err != nil {
+		return err
+	}
+
+	a.header = make(http.Header, len(a.Headers))
+
+	_, ok := a.Headers["Content-Type"]
+	if !ok {
+		a.header.Set("Content-Type", ContentTypeJSON)
+	}
+
+	r := strings.NewReplacer("[[", "{{", "]]", "}}")
+	for key, value := range a.Headers {
+		if len(value) > 0 {
+			v := value
+			v = r.Replace(v)
+			a.header.Set(key, v)
+		} else {
+			a.header.Set(key, value)
+		}
+	}
+
+	*c = Config(a)
+
+	return nil
+}

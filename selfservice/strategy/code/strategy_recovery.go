@@ -26,6 +26,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ory/herodot"
+
 	"github.com/ory/x/decoderx"
 	"github.com/ory/x/otelx"
 	"github.com/ory/x/sqlxx"
@@ -53,7 +54,7 @@ func (s *Strategy) PopulateRecoveryMethod(r *http.Request, f *recovery.Flow) err
 		f.UI.SetCSRF(s.deps.GenerateCSRFToken(r))
 		f.UI.GetNodes().Upsert(
 			node.NewInputField("email", nil, node.CodeGroup, node.InputAttributeTypeEmail, node.WithRequiredInputAttribute).
-				WithMetaLabel(text.NewInfoNodeInputEmail()),
+				WithMetaLabel(text.NewInfoNodeInputForChannel(identity.AddressTypeEmail)),
 		)
 	case flow.StateRecoveryAwaitingAddress:
 		// re-initialize the UI with a "clean" new state
@@ -198,7 +199,7 @@ func (s *Strategy) Recover(w http.ResponseWriter, r *http.Request, f *recovery.F
 		}
 	}
 
-	if _, err := s.deps.SessionManager().FetchFromRequest(ctx, r); err == nil {
+	if _, err = s.deps.SessionManager().FetchFromRequest(ctx, r); err == nil {
 		// User is already logged in
 		if x.IsJSONRequest(r) {
 			session.RespondWithJSONErrorOnAuthenticated(s.deps.Writer(), recovery.ErrAlreadyLoggedIn)(w, r)
@@ -211,7 +212,7 @@ func (s *Strategy) Recover(w http.ResponseWriter, r *http.Request, f *recovery.F
 	// Recovery V1 sets some magic fields in the UI and inspects them in the body, e.g. `method`.
 	// This is brittle and rendered unnecessary in Recovery V2 by properly inspecting the `state` (and the CSRF token).
 	if !flow.IsStateRecoveryV2(f.State) {
-		if err := flow.MethodEnabledAndAllowed(ctx, flow.RecoveryFlow, sID, body.Method, s.deps); err != nil {
+		if err = flow.MethodEnabledAndAllowed(ctx, flow.RecoveryFlow, sID, body.Method, s.deps); err != nil {
 			return s.HandleRecoveryError(w, r, nil, body, err)
 		}
 	}
@@ -310,7 +311,7 @@ func (s *Strategy) recoveryIssueSession(w http.ResponseWriter, r *http.Request, 
 	config := s.deps.Config()
 
 	sf.UI.Messages.Set(text.NewRecoverySuccessful(time.Now().Add(config.SelfServiceFlowSettingsPrivilegedSessionMaxAge(ctx))))
-	if err := s.deps.SettingsFlowPersister().UpdateSettingsFlow(r.Context(), sf); err != nil {
+	if err = s.deps.SettingsFlowPersister().UpdateSettingsFlow(r.Context(), sf); err != nil {
 		return s.retryRecoveryFlow(w, r, f.Type, RetryWithError(err))
 	}
 
@@ -345,7 +346,7 @@ func (s *Strategy) recoveryUseCode(w http.ResponseWriter, r *http.Request, body 
 	if errors.Is(err, ErrCodeNotFound) {
 		f.UI.Messages.Clear()
 		f.UI.Messages.Add(text.NewErrorValidationRecoveryCodeInvalidOrAlreadyUsed())
-		if err := s.deps.RecoveryFlowPersister().UpdateRecoveryFlow(ctx, f); err != nil {
+		if err = s.deps.RecoveryFlowPersister().UpdateRecoveryFlow(ctx, f); err != nil {
 			return s.retryRecoveryFlow(w, r, f.Type, RetryWithError(err))
 		}
 
@@ -595,7 +596,7 @@ func (s *Strategy) recoveryV2HandleStateAwaitingAddressChoice(r *http.Request, f
 	var label *text.Message
 	if strings.ContainsRune(plaintextRecoveryAddress, '@') {
 		inputType = node.InputAttributeTypeEmail
-		label = text.NewInfoNodeInputEmail()
+		label = text.NewInfoNodeInputForChannel(identity.AddressTypeEmail)
 	} else {
 		inputType = node.InputAttributeTypeTel
 		label = text.NewInfoNodeInputPhoneNumber()
@@ -617,7 +618,7 @@ func (s *Strategy) recoveryV2HandleStateAwaitingAddressChoice(r *http.Request, f
 		WithMetaLabel(text.NewRecoveryBack())
 	f.UI.GetNodes().Append(buttonScreen)
 
-	if err := s.deps.RecoveryFlowPersister().UpdateRecoveryFlow(r.Context(), f); err != nil {
+	if err = s.deps.RecoveryFlowPersister().UpdateRecoveryFlow(r.Context(), f); err != nil {
 		return err
 	}
 
@@ -677,9 +678,13 @@ func (s *Strategy) recoveryV2HandleStateConfirmingAddress(r *http.Request, f *re
 	f.UI.Nodes.Append(node.NewInputField("method", s.NodeGroup(), node.CodeGroup, node.InputAttributeTypeHidden))
 
 	// Required to make 'resend' work.
-	f.UI.Nodes.Append(node.NewInputField("recovery_confirm_address", body.RecoveryConfirmAddress, node.CodeGroup, node.InputAttributeTypeSubmit).
-		WithMetaLabel(text.NewInfoNodeResendOTP()),
-	)
+	field := node.NewInputField("recovery_confirm_address", body.RecoveryConfirmAddress, node.CodeGroup, node.InputAttributeTypeSubmit)
+	if strings.Contains(body.RecoveryAddress, "@") {
+		field = field.WithMetaLabel(text.NewInfoNodeResendCodeVia(identity.AddressTypeEmail))
+	} else {
+		field = field.WithMetaLabel(text.NewInfoNodeResendCodeVia(identity.AddressTypeSMS))
+	}
+	f.UI.Nodes.Append(field)
 	f.UI.Nodes.Append(node.NewInputField("recovery_address", body.RecoveryAddress, node.CodeGroup, node.InputAttributeTypeHidden))
 
 	buttonScreen := node.NewInputField("screen", "previous", node.CodeGroup, node.InputAttributeTypeSubmit).
@@ -703,9 +708,9 @@ func (s *Strategy) recoveryV2HandleStateAwaitingCode(w http.ResponseWriter, r *h
 		// That will invalidate all existing codes and send a new code.
 		f.State = flow.StateRecoveryAwaitingAddressConfirm
 		return s.recoveryV2HandleStateConfirmingAddress(r, f, body)
-	} else {
-		return s.recoveryUseCode(w, r, body, f)
 	}
+
+	return s.recoveryUseCode(w, r, body, f)
 }
 
 func (s *Strategy) recoveryV2HandleGoBack(r *http.Request, f *recovery.Flow, body *recoverySubmitPayload) error {
@@ -798,7 +803,7 @@ func (s *Strategy) recoveryHandleFormSubmission(w http.ResponseWriter, r *http.R
 			WithMetaLabel(text.NewInfoNodeLabelContinue()))
 
 	f.UI.Nodes.Append(node.NewInputField("email", body.Email, node.CodeGroup, node.InputAttributeTypeSubmit).
-		WithMetaLabel(text.NewInfoNodeResendOTP()),
+		WithMetaLabel(text.NewInfoNodeResendCodeVia(identity.AddressTypeEmail)),
 	)
 	if err := s.deps.RecoveryFlowPersister().UpdateRecoveryFlow(r.Context(), f); err != nil {
 		return s.HandleRecoveryError(w, r, f, body, err)
@@ -836,7 +841,7 @@ func (s *Strategy) HandleRecoveryError(w http.ResponseWriter, r *http.Request, f
 		fl.UI.SetCSRF(s.deps.GenerateCSRFToken(r))
 		fl.UI.GetNodes().Upsert(
 			node.NewInputField("email", email, node.CodeGroup, node.InputAttributeTypeEmail, node.WithRequiredInputAttribute).
-				WithMetaLabel(text.NewInfoNodeInputEmail()),
+				WithMetaLabel(text.NewInfoNodeInputForChannel(identity.AddressTypeEmail)),
 		)
 	}
 

@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ory/pop/v6"
+
 	"github.com/ory/x/fsx"
 	"github.com/ory/x/sqlcon/dockertest"
 )

@@ -3,6 +3,12 @@
 
 package text
 
+import (
+	"fmt"
+
+	"github.com/ory/x/stringsx"
+)
+
 func NewInfoNodeLabelVerifyOTP() *Message {
 	return &Message{
 		ID:   InfoNodeLabelVerifyOTP,
@@ -95,11 +101,14 @@ func NewInfoNodeLabelID() *Message {
 	}
 }
 
-func NewInfoNodeInputEmail() *Message {
+func NewInfoNodeInputForChannel(channel string) *Message {
 	return &Message{
-		ID:   InfoNodeLabelEmail,
-		Text: "Email",
+		ID:   InfoNodeLabelChannel,
+		Text: stringsx.ToUpperInitial(channel),
 		Type: Info,
+		Context: context(map[string]any{
+			"channel": channel,
+		}),
 	}
 }
 
@@ -111,11 +120,14 @@ func NewInfoNodeInputPhoneNumber() *Message {
 	}
 }
 
-func NewInfoNodeResendOTP() *Message {
+func NewInfoNodeResendCodeVia(channel string) *Message {
 	return &Message{
-		ID:   InfoNodeLabelResendOTP,
-		Text: "Resend code",
+		ID:   InfoNodeLabelResendCode,
+		Text: fmt.Sprintf("Resend code via %s", channel),
 		Type: Info,
+		Context: context(map[string]any{
+			"channel": channel,
+		}),
 	}
 }
 

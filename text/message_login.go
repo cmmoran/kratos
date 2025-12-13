@@ -40,6 +40,25 @@ func NewInfoLoginTOTPLabel() *Message {
 	}
 }
 
+func NewInfoTrustDeviceLabel() *Message {
+	return &Message{
+		ID:   InfoSelfServiceLoginTrustDeviceLabel,
+		Type: Info,
+		Text: "Trust this device",
+	}
+}
+
+func NewInfoSelfServiceLoginLookupCodesAlmostDepleted(count int) *Message {
+	return &Message{
+		ID:   InfoSelfServiceLoginLookupCodesAlmostDepleted,
+		Type: Info,
+		Text: "Backup recovery codes remaining: {count}. Please generate a new set of codes.",
+		Context: context(map[string]any{
+			"count": count,
+		}),
+	}
+}
+
 func NewInfoLoginLookupLabel() *Message {
 	return &Message{
 		ID:   InfoLoginLookupLabel,
@@ -224,11 +243,14 @@ func NewInfoSelfServiceLoginContinue() *Message {
 	}
 }
 
-func NewLoginCodeSent() *Message {
+func NewLoginCodeSent(channel string) *Message {
 	return &Message{
 		ID:   InfoSelfServiceLoginCodeSent,
 		Type: Info,
-		Text: "A code was sent to the address you provided. If you didn't receive it, please check the spelling of the address and try again.",
+		Text: fmt.Sprintf("A code has been sent to the %s you provided. If you have not received the message, please check the address and try again.", channel),
+		Context: context(map[string]any{
+			"channel": channel,
+		}),
 	}
 }
 

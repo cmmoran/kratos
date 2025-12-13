@@ -61,7 +61,18 @@ type (
 	}
 )
 
-var ErrUnknownAddress = herodot.ErrNotFound.WithReason("recovery requested for unknown address")
+func (address Address) Valid() bool {
+	return address.To != "" && address.Via != ""
+}
+
+func (address Address) Channel() string {
+	return string(address.Via)
+}
+
+var (
+	ErrUnknownAddress  = herodot.ErrNotFound.WithReason("recovery requested for unknown address")
+	ErrVerifiedAddress = herodot.ErrNotFound.WithReason("verification requested for verified address")
+)
 
 func NewSender(deps senderDependencies) *Sender {
 	return &Sender{deps: deps}
@@ -87,7 +98,7 @@ func (s *Sender) SendCode(ctx context.Context, f flow.Flow, id *identity.Identit
 
 		switch f.GetFlowName() {
 		case flow.RegistrationFlow:
-			code, err := s.deps.
+			code, registrationFlowErr := s.deps.
 				RegistrationCodePersister().
 				CreateRegistrationCode(ctx, &CreateRegistrationCodeParams{
 					AddressType: address.Via,
@@ -96,17 +107,20 @@ func (s *Sender) SendCode(ctx context.Context, f flow.Flow, id *identity.Identit
 					FlowID:      f.GetID(),
 					Address:     address.To,
 				})
-			if err != nil {
-				return err
+			if registrationFlowErr != nil {
+				return registrationFlowErr
 			}
-			model, err := x.StructToMap(id.Traits)
-			if err != nil {
-				return err
+
+			var model map[string]interface{}
+			model, registrationFlowErr = x.StructToMap(id.Traits)
+			if registrationFlowErr != nil {
+				return registrationFlowErr
 			}
 
 			s.deps.Logger().
 				WithField("registration_flow_id", code.FlowID).
 				WithField("registration_code_id", code.ID).
+				WithField("registration_code_address_type", code.AddressType).
 				WithSensitiveField("registration_code", rawCode).
 				Info("Sending out registration email with code.")
 
@@ -134,34 +148,36 @@ func (s *Sender) SendCode(ctx context.Context, f flow.Flow, id *identity.Identit
 				})
 			}
 
-			if err := s.send(ctx, string(address.Via), t); err != nil {
-				return errors.WithStack(err)
+			if registrationFlowErr = s.send(ctx, address.Channel(), t); registrationFlowErr != nil {
+				return errors.WithStack(registrationFlowErr)
 			}
 
 		case flow.LoginFlow:
-			code, err := s.deps.
+			code, loginFlowErr := s.deps.
 				LoginCodePersister().
 				CreateLoginCode(ctx, &CreateLoginCodeParams{
 					AddressType: address.Via,
 					Address:     address.To,
 					RawCode:     rawCode,
-					ExpiresIn:   s.deps.Config().SelfServiceCodeMethodLifespan(ctx),
+					ExpiresIn:   s.deps.Config().SelfServiceCodeMethodMfaLifespan(ctx),
 					FlowID:      f.GetID(),
 					IdentityID:  id.ID,
 				})
-			if err != nil {
-				return err
+			if loginFlowErr != nil {
+				return loginFlowErr
 			}
 
-			model, err := x.StructToMap(id)
-			if err != nil {
-				return err
+			var model map[string]interface{}
+			model, loginFlowErr = x.StructToMap(id)
+			if loginFlowErr != nil {
+				return loginFlowErr
 			}
 			s.deps.Logger().
 				WithField("login_flow_id", code.FlowID).
 				WithField("login_code_id", code.ID).
+				WithField("login_code_address_type", code.AddressType).
 				WithSensitiveField("login_code", rawCode).
-				Info("Sending out login email with code.")
+				Info("Sending out login otp code.")
 
 			var t courier.Template
 			switch address.Via {
@@ -172,7 +188,7 @@ func (s *Sender) SendCode(ctx context.Context, f flow.Flow, id *identity.Identit
 					Identity:           model,
 					RequestURL:         f.GetRequestURL(),
 					TransientPayload:   transientPayload,
-					ExpiresInMinutes:   int(s.deps.Config().SelfServiceCodeMethodLifespan(ctx).Minutes()),
+					ExpiresInMinutes:   int(s.deps.Config().SelfServiceCodeMethodMfaLifespan(ctx).Minutes()),
 					UserRequestHeaders: hook.RemoveDisallowedHeaders(header, s.deps.Config().WebhookHeaderAllowlist(ctx)),
 				})
 			case identity.ChannelTypeSMS:
@@ -182,12 +198,12 @@ func (s *Sender) SendCode(ctx context.Context, f flow.Flow, id *identity.Identit
 					Identity:           model,
 					RequestURL:         f.GetRequestURL(),
 					TransientPayload:   transientPayload,
-					ExpiresInMinutes:   int(s.deps.Config().SelfServiceCodeMethodLifespan(ctx).Minutes()),
+					ExpiresInMinutes:   int(s.deps.Config().SelfServiceCodeMethodMfaLifespan(ctx).Minutes()),
 					UserRequestHeaders: hook.RemoveDisallowedHeaders(header, s.deps.Config().WebhookHeaderAllowlist(ctx)),
 				})
 			}
 
-			if err := s.send(ctx, string(address.Via), t); err != nil {
+			if loginFlowErr = s.send(ctx, address.Channel(), t); loginFlowErr != nil {
 				return errors.WithStack(err)
 			}
 
@@ -362,6 +378,8 @@ func (s *Sender) SendVerificationCode(ctx context.Context, f *verification.Flow,
 
 	} else if err != nil {
 		return err
+	} else if address.Verified || address.Status == identity.VerifiableAddressStatusCompleted {
+		return errors.WithStack(ErrVerifiedAddress)
 	}
 
 	rawCode := GenerateCode()
@@ -398,9 +416,9 @@ func (s *Sender) SendVerificationCodeTo(ctx context.Context, f *verification.Flo
 		WithField("via", code.VerifiableAddress.Via).
 		WithField("identity_id", i.ID).
 		WithField("verification_code_id", code.ID).
-		WithSensitiveField("email_address", code.VerifiableAddress.Value).
+		WithSensitiveField("address", code.VerifiableAddress.Value).
 		WithSensitiveField("verification_link_token", codeString).
-		Info("Sending out verification email with verification code.")
+		Infof("Sending out verification %s with verification code.", code.VerifiableAddress.Via)
 
 	model, err := x.StructToMap(i)
 	if err != nil {
@@ -439,7 +457,7 @@ func (s *Sender) SendVerificationCodeTo(ctx context.Context, f *verification.Flo
 		return errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Expected email or sms but got %s", code.VerifiableAddress.Via))
 	}
 
-	if err := s.send(ctx, code.VerifiableAddress.Via, t); err != nil {
+	if err = s.send(ctx, code.VerifiableAddress.Via, t); err != nil {
 		return err
 	}
 	code.VerifiableAddress.Status = identity.VerifiableAddressStatusSent

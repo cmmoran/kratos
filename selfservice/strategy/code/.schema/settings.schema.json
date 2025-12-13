@@ -1,0 +1,29 @@
+{
+  "$id": "https://schemas.ory.sh/kratos/selfservice/strategy/totp/settings.schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "code_enable": {
+      "type": "boolean"
+    },
+    "code_disable": {
+      "type": "boolean"
+    },
+    "code_device_untrust": {
+      "type": "string"
+    },
+    "csrf_token": {
+      "type": "string"
+    },
+    "method": {
+      "type": "string"
+    },
+    "transient_payload": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "not": {
+    "required": ["code_enable", "code_disable"]
+  }
+}

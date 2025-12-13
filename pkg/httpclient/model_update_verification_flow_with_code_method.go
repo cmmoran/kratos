@@ -21,14 +21,16 @@ var _ MappedNullable = &UpdateVerificationFlowWithCodeMethod{}
 
 // UpdateVerificationFlowWithCodeMethod struct for UpdateVerificationFlowWithCodeMethod
 type UpdateVerificationFlowWithCodeMethod struct {
-	// Code from the recovery email  If you want to submit a code, use this field, but make sure to _not_ include the email field, as well.
+	// Code from the verification email  If you want to submit a code, use this field, but make sure to _not_ include the email field, as well.
 	Code *string `json:"code,omitempty"`
 	// Sending the anti-csrf token is only required for browser login flows.
 	CsrfToken *string `json:"csrf_token,omitempty"`
-	// The email address to verify  If the email belongs to a valid account, a verifiation email will be sent.  If you want to notify the email address if the account does not exist, see the [notify_unknown_recipients flag](https://www.ory.sh/docs/kratos/self-service/flows/verify-email-account-activation#attempted-verification-notifications)  If a code was already sent, including this field in the payload will invalidate the sent code and re-send a new code.  format: email
+	// Email address to verify  If the email belongs to a valid account, a verification email will be sent.  If you want to notify the email address if the account does not exist, see the [notify_unknown_recipients flag](https://www.ory.sh/docs/kratos/self-service/flows/verify-email-account-activation#attempted-verification-notifications)  If a code was already sent, including this field in the payload will invalidate the sent code and re-send a new code.  format: email
 	Email *string `json:"email,omitempty"`
 	// Method is the method that should be used for this verification flow  Allowed values are `link` and `code`. link VerificationStrategyLink code VerificationStrategyCode
 	Method string `json:"method"`
+	// PhoneNumber to verify  If the phone number belongs to a valid account, a verification sms will be sent.  If you want to notify the phone number if the account does not exist, see the [notify_unknown_recipients flag](https://www.ory.sh/docs/kratos/self-service/flows/verify-email-account-activation#attempted-verification-notifications)  If a code was already sent, including this field in the payload will invalidate the sent code and re-send a new code.  format: tel
+	Sms *string `json:"sms,omitempty"`
 	// Transient data to pass along to any webhooks
 	TransientPayload     map[string]interface{} `json:"transient_payload,omitempty"`
 	AdditionalProperties map[string]interface{}
@@ -174,6 +176,38 @@ func (o *UpdateVerificationFlowWithCodeMethod) SetMethod(v string) {
 	o.Method = v
 }
 
+// GetSms returns the Sms field value if set, zero value otherwise.
+func (o *UpdateVerificationFlowWithCodeMethod) GetSms() string {
+	if o == nil || IsNil(o.Sms) {
+		var ret string
+		return ret
+	}
+	return *o.Sms
+}
+
+// GetSmsOk returns a tuple with the Sms field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *UpdateVerificationFlowWithCodeMethod) GetSmsOk() (*string, bool) {
+	if o == nil || IsNil(o.Sms) {
+		return nil, false
+	}
+	return o.Sms, true
+}
+
+// HasSms returns a boolean if a field has been set.
+func (o *UpdateVerificationFlowWithCodeMethod) HasSms() bool {
+	if o != nil && !IsNil(o.Sms) {
+		return true
+	}
+
+	return false
+}
+
+// SetSms gets a reference to the given string and assigns it to the Sms field.
+func (o *UpdateVerificationFlowWithCodeMethod) SetSms(v string) {
+	o.Sms = &v
+}
+
 // GetTransientPayload returns the TransientPayload field value if set, zero value otherwise.
 func (o *UpdateVerificationFlowWithCodeMethod) GetTransientPayload() map[string]interface{} {
 	if o == nil || IsNil(o.TransientPayload) {
@@ -226,6 +260,9 @@ func (o UpdateVerificationFlowWithCodeMethod) ToMap() (map[string]interface{}, e
 		toSerialize["email"] = o.Email
 	}
 	toSerialize["method"] = o.Method
+	if !IsNil(o.Sms) {
+		toSerialize["sms"] = o.Sms
+	}
 	if !IsNil(o.TransientPayload) {
 		toSerialize["transient_payload"] = o.TransientPayload
 	}
@@ -276,6 +313,7 @@ func (o *UpdateVerificationFlowWithCodeMethod) UnmarshalJSON(data []byte) (err e
 		delete(additionalProperties, "csrf_token")
 		delete(additionalProperties, "email")
 		delete(additionalProperties, "method")
+		delete(additionalProperties, "sms")
 		delete(additionalProperties, "transient_payload")
 		o.AdditionalProperties = additionalProperties
 	}

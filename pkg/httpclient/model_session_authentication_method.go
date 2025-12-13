@@ -24,6 +24,8 @@ type SessionAuthenticationMethod struct {
 	Aal *AuthenticatorAssuranceLevel `json:"aal,omitempty"`
 	// When the authentication challenge was completed.
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
+	// DeviceTrustBased indicates that this authentication method was added due to device trust
+	DeviceTrustBased *bool `json:"device_trust_based,omitempty"`
 	// The method used in this authenticator. password CredentialsTypePassword oidc CredentialsTypeOIDC totp CredentialsTypeTOTP lookup_secret CredentialsTypeLookup webauthn CredentialsTypeWebAuthn code CredentialsTypeCodeAuth passkey CredentialsTypePasskey profile CredentialsTypeProfile saml CredentialsTypeSAML link_recovery CredentialsTypeRecoveryLink  CredentialsTypeRecoveryLink is a special credential type linked to the link strategy (recovery flow).  It is not used within the credentials object itself. code_recovery CredentialsTypeRecoveryCode
 	Method *string `json:"method,omitempty"`
 	// The Organization id used for authentication
@@ -114,6 +116,38 @@ func (o *SessionAuthenticationMethod) HasCompletedAt() bool {
 // SetCompletedAt gets a reference to the given time.Time and assigns it to the CompletedAt field.
 func (o *SessionAuthenticationMethod) SetCompletedAt(v time.Time) {
 	o.CompletedAt = &v
+}
+
+// GetDeviceTrustBased returns the DeviceTrustBased field value if set, zero value otherwise.
+func (o *SessionAuthenticationMethod) GetDeviceTrustBased() bool {
+	if o == nil || IsNil(o.DeviceTrustBased) {
+		var ret bool
+		return ret
+	}
+	return *o.DeviceTrustBased
+}
+
+// GetDeviceTrustBasedOk returns a tuple with the DeviceTrustBased field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *SessionAuthenticationMethod) GetDeviceTrustBasedOk() (*bool, bool) {
+	if o == nil || IsNil(o.DeviceTrustBased) {
+		return nil, false
+	}
+	return o.DeviceTrustBased, true
+}
+
+// HasDeviceTrustBased returns a boolean if a field has been set.
+func (o *SessionAuthenticationMethod) HasDeviceTrustBased() bool {
+	if o != nil && !IsNil(o.DeviceTrustBased) {
+		return true
+	}
+
+	return false
+}
+
+// SetDeviceTrustBased gets a reference to the given bool and assigns it to the DeviceTrustBased field.
+func (o *SessionAuthenticationMethod) SetDeviceTrustBased(v bool) {
+	o.DeviceTrustBased = &v
 }
 
 // GetMethod returns the Method field value if set, zero value otherwise.
@@ -228,6 +262,9 @@ func (o SessionAuthenticationMethod) ToMap() (map[string]interface{}, error) {
 	if !IsNil(o.CompletedAt) {
 		toSerialize["completed_at"] = o.CompletedAt
 	}
+	if !IsNil(o.DeviceTrustBased) {
+		toSerialize["device_trust_based"] = o.DeviceTrustBased
+	}
 	if !IsNil(o.Method) {
 		toSerialize["method"] = o.Method
 	}
@@ -261,6 +298,7 @@ func (o *SessionAuthenticationMethod) UnmarshalJSON(data []byte) (err error) {
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
 		delete(additionalProperties, "aal")
 		delete(additionalProperties, "completed_at")
+		delete(additionalProperties, "device_trust_based")
 		delete(additionalProperties, "method")
 		delete(additionalProperties, "organization")
 		delete(additionalProperties, "provider")
