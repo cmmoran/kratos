@@ -50,13 +50,26 @@ func (s *Strategy) PopulateLoginMethod(r *http.Request, requestedAAL identity.Au
 		return err
 	}
 
-	_, ok := id.GetCredentials(s.ID())
+	i, ok := id.GetCredentials(s.ID())
 	if !ok {
 		// Identity has no lookup codes
 		return nil
 	}
 
+	var count int
+	var o identity.CredentialsLookupConfig
+	_ = json.Unmarshal(i.Config, &o)
+
+	for k := range o.RecoveryCodes {
+		if time.Time(o.RecoveryCodes[k].UsedAt).IsZero() {
+			count++
+		}
+	}
+
 	sr.UI.SetCSRF(s.d.GenerateCSRFToken(r))
+	if count <= 3 {
+		sr.UI.Messages.Add(text.NewInfoSelfServiceLoginLookupCodesAlmostDepleted(count))
+	}
 	sr.UI.SetNode(node.NewInputField(node.LookupCodeEnter, "", node.LookupGroup, node.InputAttributeTypeText, node.WithRequiredInputAttribute).WithMetaLabel(text.NewInfoLoginLookupLabel()))
 	sr.UI.GetNodes().Append(node.NewInputField("method", s.ID(), node.LookupGroup, node.InputAttributeTypeSubmit).WithMetaLabel(text.NewInfoLoginLookup()))
 
@@ -129,7 +142,10 @@ func (s *Strategy) Login(_ http.ResponseWriter, r *http.Request, f *login.Flow, 
 		return nil, x.WrapWithIdentityIDError(errors.WithStack(herodot.ErrInternalServerError.WithReason("The lookup secrets could not be decoded properly").WithDebug(err.Error()).WithWrap(err)), i.ID)
 	}
 
-	var found bool
+	var (
+		found bool
+	)
+
 	for k, rc := range o.RecoveryCodes {
 		if rc.Code == p.Code {
 			if time.Time(rc.UsedAt).IsZero() {

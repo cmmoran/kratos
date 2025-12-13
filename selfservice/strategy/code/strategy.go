@@ -18,6 +18,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	"github.com/ory/herodot"
+
 	"github.com/ory/kratos/continuity"
 	"github.com/ory/kratos/courier"
 	"github.com/ory/kratos/driver/config"
@@ -129,7 +130,7 @@ type (
 	}
 )
 
-func (s *Strategy) CountActiveFirstFactorCredentials(ctx context.Context, cc map[identity.CredentialsType]identity.Credentials) (int, error) {
+func (s *Strategy) CountActiveFirstFactorCredentials(ctx context.Context, _ map[identity.CredentialsType]identity.Credentials) (int, error) {
 	codeConfig := s.deps.Config().SelfServiceCodeStrategy(ctx)
 	if codeConfig.PasswordlessEnabled {
 		// Login with code for passwordless is enabled
@@ -177,9 +178,11 @@ func (s *Strategy) CountActiveMultiFactorCredentials(ctx context.Context, cc map
 
 	// Count valid addresses configured for MFA
 	validAddresses := 0
-	for _, addr := range conf.Addresses {
-		if addr.Address != "" {
-			validAddresses++
+	if !conf.Disabled {
+		for _, addr := range conf.Addresses {
+			if addr.Address != "" {
+				validAddresses++
+			}
 		}
 	}
 
@@ -200,9 +203,9 @@ func (s *Strategy) NodeGroup() node.UiNodeGroup {
 
 func (s *Strategy) PopulateMethod(r *http.Request, f flow.Flow) error {
 	codeConfig := s.deps.Config().SelfServiceCodeStrategy(r.Context())
-	switch f := f.(type) {
+	switch fType := f.(type) {
 	case *login.Flow:
-		if f.RequestedAAL == identity.AuthenticatorAssuranceLevel2 {
+		if fType.RequestedAAL == identity.AuthenticatorAssuranceLevel2 {
 			if !codeConfig.MFAEnabled {
 				// if the flow is requesting AAL2 but MFA is not enabled for the code strategy, we return nil so that
 				// other strategies can fulfil the request
@@ -231,8 +234,8 @@ func (s *Strategy) PopulateMethod(r *http.Request, f flow.Flow) error {
 		if err := s.populateChooseMethodFlow(r, f); err != nil {
 			return err
 		}
-	case flow.StateEmailSent:
-		if err := s.populateEmailSentFlow(r.Context(), f); err != nil {
+	case flow.StateEmailSent, flow.StateSmsSent:
+		if err := s.populateCodeSentFlow(r.Context(), f); err != nil {
 			return err
 		}
 	case flow.StatePassedChallenge:
@@ -251,22 +254,27 @@ func (s *Strategy) PopulateMethod(r *http.Request, f flow.Flow) error {
 
 func (s *Strategy) populateChooseMethodFlow(r *http.Request, f flow.Flow) error {
 	ctx := r.Context()
-	switch f := f.(type) {
+	switch fType := f.(type) {
 	case *recovery.Flow, *verification.Flow:
-		f.GetUI().Nodes.Append(
+		fType.GetUI().Nodes.Append(
 			node.NewInputField("email", nil, node.CodeGroup, node.InputAttributeTypeEmail, node.WithRequiredInputAttribute).
-				WithMetaLabel(text.NewInfoNodeInputEmail()),
+				WithMetaLabel(text.NewInfoNodeInputForChannel(identity.AddressTypeEmail)),
 		)
-		f.GetUI().Nodes.Append(
-			node.NewInputField("method", s.ID(), node.CodeGroup, node.InputAttributeTypeSubmit).
-				WithMetaLabel(text.NewInfoNodeLabelContinue()),
-		)
+
+		if fType.GetFlowName() == flow.VerificationFlow {
+			fType.GetUI().Nodes.Append(
+				node.NewInputField("sms", nil, node.CodeGroup, node.InputAttributeTypeTel, node.WithRequiredInputAttribute).
+					WithMetaLabel(text.NewInfoNodeInputForChannel(identity.AddressTypeSMS)),
+			)
+		}
+
+		fType.GetUI().Nodes.Append(node.NewInputField("method", s.ID(), node.CodeGroup, node.InputAttributeTypeSubmit).WithMetaLabel(text.NewInfoNodeLabelContinue()))
 	case *login.Flow:
-		ds, err := f.IdentitySchema.URL(ctx, s.deps.Config())
+		ds, err := fType.IdentitySchema.URL(ctx, s.deps.Config())
 		if err != nil {
 			return err
 		}
-		if f.RequestedAAL == identity.AuthenticatorAssuranceLevel2 {
+		if fType.RequestedAAL == identity.AuthenticatorAssuranceLevel2 {
 			via := r.URL.Query().Get("via")
 
 			sess, err := s.deps.SessionManager().FetchFromRequest(r.Context(), r)
@@ -286,8 +294,11 @@ func (s *Strategy) populateChooseMethodFlow(r *http.Request, f flow.Flow) error 
 				return err
 			}
 			for _, address := range addresses {
+				sort.SliceStable(addresses, func(i, j int) bool {
+					return addresses[i].To < addresses[j].To && addresses[i].Via < addresses[j].Via
+				})
 				f.GetUI().Nodes.Append(node.NewInputField("address", address.To, node.CodeGroup, node.InputAttributeTypeSubmit).
-					WithMetaLabel(text.NewInfoSelfServiceLoginAAL2CodeAddress(string(address.Via), address.To)))
+					WithMetaLabel(text.NewInfoSelfServiceLoginAAL2CodeAddress(address.Channel(), address.To)))
 			}
 		} else {
 			identifierLabel, err := login.GetIdentifierLabelFromSchema(ctx, ds.String())
@@ -295,8 +306,8 @@ func (s *Strategy) populateChooseMethodFlow(r *http.Request, f flow.Flow) error 
 				return err
 			}
 
-			f.GetUI().Nodes.Upsert(node.NewInputField("identifier", "", node.DefaultGroup, node.InputAttributeTypeText, node.WithRequiredInputAttribute).WithMetaLabel(identifierLabel))
-			f.GetUI().Nodes.Append(
+			fType.GetUI().Nodes.Upsert(node.NewInputField("identifier", "", node.DefaultGroup, node.InputAttributeTypeText, node.WithRequiredInputAttribute).WithMetaLabel(identifierLabel))
+			fType.GetUI().Nodes.Append(
 				node.NewInputField("method", s.ID(), node.CodeGroup, node.InputAttributeTypeSubmit).WithMetaLabel(text.NewInfoSelfServiceLoginCode()),
 			)
 		}
@@ -305,7 +316,8 @@ func (s *Strategy) populateChooseMethodFlow(r *http.Request, f flow.Flow) error 
 	return nil
 }
 
-func (s *Strategy) populateEmailSentFlow(ctx context.Context, f flow.Flow) error {
+// populateCodeSentFlow prepares and updates the UI flow nodes and messages for email-based flows like recovery, verification, login, or registration.
+func (s *Strategy) populateCodeSentFlow(ctx context.Context, f flow.Flow) error {
 	// fresh ui node group
 	freshNodes := node.Nodes{}
 	var route string
@@ -314,6 +326,7 @@ func (s *Strategy) populateEmailSentFlow(ctx context.Context, f flow.Flow) error
 
 	var resendNode *node.Node
 	var backNode *node.Node
+	var trustDeviceNode *node.Node
 
 	switch f.GetFlowName() {
 	case flow.RecoveryFlow:
@@ -321,19 +334,35 @@ func (s *Strategy) populateEmailSentFlow(ctx context.Context, f flow.Flow) error
 		codeMetaLabel = text.NewInfoNodeLabelRecoveryCode()
 		message = text.NewRecoveryEmailWithCodeSent()
 
-		resendNode = node.NewInputField("email", nil, node.CodeGroup, node.InputAttributeTypeEmail, node.WithRequiredInputAttribute).
-			WithMetaLabel(text.NewInfoNodeResendOTP())
+		resendNode = node.NewInputField(identity.AddressTypeEmail, nil, node.CodeGroup, node.InputAttributeTypeEmail, node.WithRequiredInputAttribute).
+			WithMetaLabel(text.NewInfoNodeResendCodeVia(identity.AddressTypeEmail))
 
 	case flow.VerificationFlow:
 		route = verification.RouteSubmitFlow
 		codeMetaLabel = text.NewInfoNodeLabelVerificationCode()
-		message = text.NewVerificationEmailWithCodeSent()
+		channel := identity.AddressTypeEmail
+
+		for _, n := range f.GetUI().Nodes {
+			if n.ID() == identity.AddressTypeEmail || n.ID() == identity.AddressTypeSMS {
+				if input, ok := n.Attributes.(*node.InputAttributes); ok {
+					input.Type = node.InputAttributeTypeHidden
+					n.Attributes = input
+					input.Name = n.ID()
+				}
+				freshNodes = append(freshNodes, n)
+				if n.Meta != nil && n.Meta.Label != nil && n.Meta.Label.Context != nil && (message == nil || n.HasValue()) {
+					if channel = gjson.GetBytes(n.Meta.Label.Context, "channel").String(); channel != "" {
+						message = text.NewVerificationCodeSent(channel, s.VerificationStrategyID())
+					}
+				}
+			}
+		}
 
 	case flow.LoginFlow:
 		route = login.RouteSubmitFlow
 		codeMetaLabel = text.NewInfoNodeLabelLoginCode()
-		message = text.NewLoginCodeSent()
 
+		channel := identity.AddressTypeEmail
 		// preserve the login identifier that was submitted
 		// so we can retry the code flow with the same data
 		for _, n := range f.GetUI().Nodes {
@@ -344,11 +373,29 @@ func (s *Strategy) populateEmailSentFlow(ctx context.Context, f flow.Flow) error
 					input.Name = "identifier"
 				}
 				freshNodes = append(freshNodes, n)
+				if n.Meta != nil && n.Meta.Label != nil && n.Meta.Label.Context != nil && (message == nil || n.HasValue()) {
+					if channel = gjson.GetBytes(n.Meta.Label.Context, "channel").String(); channel != "" {
+						message = text.NewLoginCodeSent(channel)
+					}
+				}
+			}
+		}
+		if message == nil {
+			if f.GetState() == flow.StateEmailSent {
+				message = text.NewLoginCodeSent(identity.AddressTypeEmail)
+			} else if f.GetState() == flow.StateSmsSent {
+				message = text.NewLoginCodeSent(identity.AddressTypeSMS)
 			}
 		}
 
+		//@TODO: I do not like this hack
+		f.(*login.Flow).SetReturnTo()
+		if (f.(*login.Flow).OAuth2LoginChallenge != "" || f.(*login.Flow).HydraLoginRequest != nil || !f.(*login.Flow).Refresh) && !strings.HasSuffix(f.(*login.Flow).ReturnTo, "/settings") {
+			trustDeviceNode = node.NewInputField("trust_device", false, node.CodeGroup, node.InputAttributeTypeCheckbox).WithMetaLabel(text.NewInfoTrustDeviceLabel())
+		}
+
 		resendNode = node.NewInputField("resend", "code", node.CodeGroup, node.InputAttributeTypeSubmit).
-			WithMetaLabel(text.NewInfoNodeResendOTP())
+			WithMetaLabel(text.NewInfoNodeResendCodeVia(channel))
 
 	case flow.RegistrationFlow:
 		route = registration.RouteSubmitFlow
@@ -376,7 +423,7 @@ func (s *Strategy) populateEmailSentFlow(ctx context.Context, f flow.Flow) error
 			}
 		}
 
-		resendNode = nodeRegistrationResendNode()
+		resendNode = nodeRegistrationResendNode(identity.AddressTypeEmail)
 
 		// Insert a back button if we have a two-step registration screen, so that the
 		// user can navigate back to the credential selection screen.
@@ -394,6 +441,10 @@ func (s *Strategy) populateEmailSentFlow(ctx context.Context, f flow.Flow) error
 	// code input field
 	freshNodes.Upsert(nodeCodeInputField().WithMetaLabel(codeMetaLabel))
 
+	if trustDeviceNode != nil {
+		freshNodes.Upsert(trustDeviceNode)
+	}
+
 	// code submit button
 	freshNodes.Append(nodeContinueButton())
 
@@ -407,10 +458,17 @@ func (s *Strategy) populateEmailSentFlow(ctx context.Context, f flow.Flow) error
 
 	f.GetUI().Nodes = freshNodes
 
+	if err := sortNodes(ctx, f.GetUI().Nodes); err != nil {
+		return err
+	}
+
 	f.GetUI().Method = "POST"
 	f.GetUI().Action = flow.AppendFlowTo(urlx.AppendPaths(s.deps.Config().SelfPublicURL(ctx), route), f.GetID()).String()
 
-	f.GetUI().Messages.Set(message)
+	if message != nil {
+		f.GetUI().Messages.Set(message)
+	}
+
 	return nil
 }
 

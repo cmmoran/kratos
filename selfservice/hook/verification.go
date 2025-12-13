@@ -6,6 +6,8 @@ package hook
 import (
 	"context"
 	"net/http"
+	"net/url"
+	"slices"
 
 	"github.com/tidwall/sjson"
 	"go.opentelemetry.io/otel/attribute"
@@ -13,6 +15,8 @@ import (
 	"github.com/ory/x/otelx/semconv"
 
 	"github.com/gofrs/uuid"
+
+	"github.com/ory/x/urlx"
 
 	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/identity"
@@ -38,6 +42,7 @@ var (
 type (
 	verifierDependencies interface {
 		config.Provider
+		x.LoggingProvider
 		nosurfx.CSRFTokenGeneratorProvider
 		nosurfx.CSRFProvider
 		verification.StrategyProvider
@@ -66,13 +71,18 @@ func (e *Verifier) ExecutePostRegistrationPostPersistHook(w http.ResponseWriter,
 	})
 }
 
-func (e *Verifier) ExecuteSettingsPostPersistHook(w http.ResponseWriter, r *http.Request, f *settings.Flow, i *identity.Identity, _ *session.Session) error {
+func (e *Verifier) ExecuteSettingsPostPersistHook(w http.ResponseWriter, r *http.Request, f *settings.Flow, i *identity.Identity, s *session.Session) error {
 	return otelx.WithSpan(r.Context(), "selfservice.hook.Verifier.ExecuteSettingsPostPersistHook", func(ctx context.Context) error {
-		return e.do(w, r.WithContext(ctx), i, f, nil)
+		return e.do(w, r.WithContext(ctx), i, f, func(v *verification.Flow) {
+			to := f.AppendTo(e.r.Config().SelfServiceFlowSettingsUI(ctx))
+			v.RequestURL = urlx.CopyWithQuery(to, url.Values{"return_to": {to.String()}}).String()
+			v.SessionID = uuid.NullUUID{UUID: s.ID, Valid: true}
+			v.IdentityID = uuid.NullUUID{UUID: i.ID, Valid: true}
+		})
 	})
 }
 
-func (e *Verifier) ExecuteLoginPostHook(w http.ResponseWriter, r *http.Request, g node.UiNodeGroup, f *login.Flow, s *session.Session) (err error) {
+func (e *Verifier) ExecuteLoginPostHook(w http.ResponseWriter, r *http.Request, _ node.UiNodeGroup, f *login.Flow, s *session.Session) (err error) {
 	ctx, span := e.r.Tracer(r.Context()).Tracer().Start(r.Context(), "selfservice.hook.Verifier.ExecuteLoginPostHook")
 	r = r.WithContext(ctx)
 	defer otelx.End(span, &err)
@@ -81,7 +91,11 @@ func (e *Verifier) ExecuteLoginPostHook(w http.ResponseWriter, r *http.Request, 
 		return nil
 	}
 
-	return e.do(w, r.WithContext(ctx), s.Identity, f, nil)
+	return e.do(w, r.WithContext(ctx), s.Identity, f, func(v *verification.Flow) {
+		v.RequestURL = f.RequestURL
+		v.SessionID = uuid.NullUUID{UUID: s.ID, Valid: true}
+		v.IdentityID = uuid.NullUUID{UUID: s.Identity.ID, Valid: true}
+	})
 }
 
 const InternalContextRegistrationVerificationFlow = "registration_verification_flow_continue_with"
@@ -111,8 +125,32 @@ func (e *Verifier) do(
 	isBrowserFlow := f.GetType() == flow.TypeBrowser
 	isRegistrationOrLoginFlow := f.GetFlowName() == flow.RegistrationFlow || f.GetFlowName() == flow.LoginFlow
 
-	for k := range i.VerifiableAddresses {
-		address := &i.VerifiableAddresses[k]
+	va := i.VerifiableAddresses
+	slices.SortStableFunc(va, func(a, b identity.VerifiableAddress) int {
+		if a.Via == identity.AddressTypeEmail {
+			if !a.Verified {
+				return -1
+			}
+
+			return 0
+		} else if b.Via == identity.AddressTypeEmail {
+			if !b.Verified {
+				return 1
+			}
+
+			return 0
+		}
+		if !a.Verified {
+			return -1
+		} else if !b.Verified {
+			return 1
+		}
+
+		return 0
+	})
+
+	for k := range va {
+		address := &va[k]
 		if isRegistrationOrLoginFlow && address.Verified {
 			continue
 		} else if !isRegistrationOrLoginFlow && address.Status != identity.VerifiableAddressStatusPending {
@@ -139,7 +177,8 @@ func (e *Verifier) do(
 			}
 		}
 
-		verificationFlow, err := verification.NewPostHookFlow(e.r.Config(),
+		var verificationFlow *verification.Flow
+		verificationFlow, err = verification.NewPostHookFlow(e.r.Config(),
 			e.r.Config().SelfServiceFlowVerificationRequestLifespan(ctx),
 			csrf, r, strategy, f)
 		if err != nil {
@@ -150,27 +189,41 @@ func (e *Verifier) do(
 			flowCallback(verificationFlow)
 		}
 
-		verificationFlow.State = flow.StateEmailSent
-		if err := strategy.PopulateVerificationMethod(r, verificationFlow); err != nil {
+		e.r.Audit().WithRequest(r).WithField("flow", f).WithField("identity_id", i.ID).Infof("Creating verification flow for address %s", address.Via)
+		if address.Value != "" && address.Via != "" {
+			verificationFlow.UI.Nodes.Upsert(node.NewInputField(address.Via, address.Value, node.CodeGroup, node.InputAttributeTypeHidden, node.WithRequiredInputAttribute).
+				WithMetaLabel(text.NewInfoNodeInputForChannel(address.Via)))
+		}
+
+		if address.Via == identity.AddressTypeEmail {
+			verificationFlow.State = flow.StateEmailSent
+		} else {
+			verificationFlow.State = flow.StateSmsSent
+		}
+
+		if err = strategy.PopulateVerificationMethod(r, verificationFlow); err != nil {
 			return err
 		}
 
-		verificationFlow.UI.Nodes.Append(
-			node.NewInputField(address.Via, address.Value, node.CodeGroup, node.InputAttributeTypeSubmit).
-				WithMetaLabel(text.NewInfoNodeResendOTP()),
-		)
+		if address.Value != "" && address.Via != "" {
+			verificationFlow.UI.Nodes.Append(
+				node.NewInputField(address.Via, address.Value, node.CodeGroup, node.InputAttributeTypeSubmit).
+					WithMetaLabel(text.NewInfoNodeResendCodeVia(address.Via)),
+			)
+		}
 
-		if err := e.r.VerificationFlowPersister().CreateVerificationFlow(ctx, verificationFlow); err != nil {
+		if err = e.r.VerificationFlowPersister().CreateVerificationFlow(ctx, verificationFlow); err != nil {
 			return err
 		}
 
-		if err := strategy.SendVerificationCode(ctx, verificationFlow, i, address); err != nil {
+		if err = strategy.SendVerificationCode(ctx, verificationFlow, i, address); err != nil {
 			return err
 		}
 
 		flowURL := ""
 		if verificationFlow.Type == flow.TypeBrowser {
-			flowURL = verificationFlow.AppendTo(e.r.Config().SelfServiceFlowVerificationUI(ctx)).String()
+			to := verificationFlow.AppendTo(e.r.Config().SelfServiceFlowVerificationUI(ctx))
+			flowURL = urlx.CopyWithQuery(to, url.Values{"return_to": {f.GetRequestURL()}}).String()
 		}
 
 		continueWith := flow.NewContinueWithVerificationUI(verificationFlow.ID, address.Value, flowURL)

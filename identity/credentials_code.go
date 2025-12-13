@@ -59,6 +59,7 @@ func NewCodeChannel(value string) (CodeChannel, error) {
 // swagger:model identityCredentialsCode
 type CredentialsCode struct {
 	Addresses []CredentialsCodeAddress `json:"addresses"`
+	Disabled  bool                     `json:"disabled"`
 }
 
 // swagger:model identityCredentialsCodeAddress

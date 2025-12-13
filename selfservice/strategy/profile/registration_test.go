@@ -184,10 +184,13 @@ func TestOneStepRegistration(t *testing.T) {
 	conf.MustSet(ctx, config.ViperKeySelfServiceBrowserDefaultReturnTo, "https://www.ory.sh/")
 	conf.MustSet(ctx, config.ViperKeySelfServiceRegistrationFlowStyle, "unified")
 
+	//ui := testhelpers.NewSettingsUIEchoServer(t, reg)
 	_ = testhelpers.NewErrorTestServer(t, reg)
 	publicTS, _ := testhelpers.NewKratosServer(t, reg)
 	_ = testhelpers.NewRedirSessionEchoTS(t, reg)
 	ui := testhelpers.NewRegistrationUIFlowEchoServer(t, reg)
+
+	//publicTS, _ := testhelpers.NewKratosServer(t, reg)
 
 	t.Run("initial form is populated with identity traits", func(t *testing.T) {
 		t.Run("type=browser", func(t *testing.T) {

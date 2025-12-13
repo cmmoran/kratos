@@ -22,6 +22,7 @@ import (
 	"github.com/tidwall/sjson"
 
 	"github.com/ory/herodot"
+
 	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/schema"
 	"github.com/ory/kratos/selfservice/flow"

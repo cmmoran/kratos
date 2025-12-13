@@ -18,6 +18,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/ory/herodot"
+
 	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/schema"
 	"github.com/ory/kratos/selfservice/flow"
@@ -37,7 +38,7 @@ func nodeSubmit() *node.Node {
 
 var _ registration.FormHydrator = new(Strategy)
 
-// Update Registration Flow with Password Method
+// UpdateRegistrationFlowWithPasswordMethod Update Registration Flow with Password Method
 //
 // swagger:model updateRegistrationFlowWithPasswordMethod
 type UpdateRegistrationFlowWithPasswordMethod struct {
@@ -103,13 +104,13 @@ func (s *Strategy) Register(_ http.ResponseWriter, r *http.Request, f *registrat
 	}
 
 	var p UpdateRegistrationFlowWithPasswordMethod
-	if err := s.decode(&p, r, ds); err != nil {
+	if err = s.decode(&p, r, ds); err != nil {
 		return s.handleRegistrationError(r, f, p, err)
 	}
 
 	f.TransientPayload = p.TransientPayload
 
-	if err := flow.EnsureCSRF(s.d, r, f.Type, s.d.Config().DisableAPIFlowEnforcement(ctx), s.d.GenerateCSRFToken, p.CSRFToken); err != nil {
+	if err = flow.EnsureCSRF(s.d, r, f.Type, s.d.Config().DisableAPIFlowEnforcement(ctx), s.d.GenerateCSRFToken, p.CSRFToken); err != nil {
 		return s.handleRegistrationError(r, f, p, err)
 	}
 

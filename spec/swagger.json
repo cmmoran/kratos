@@ -816,6 +816,127 @@
         }
       }
     },
+    "/admin/identities/{id}/devices": {
+      "get": {
+        "security": [
+          {
+            "oryAccessToken": []
+          }
+        ],
+        "description": "This endpoint returns all trusted devices for any sessions that belong to the given Identity.",
+        "schemes": [
+          "http",
+          "https"
+        ],
+        "tags": [
+          "identity"
+        ],
+        "summary": "List an Identity's trusted devices",
+        "operationId": "listIdentityDevices",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "ID is the identity's ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/responses/listIdentityDevices"
+          },
+          "400": {
+            "description": "errorGeneric",
+            "schema": {
+              "$ref": "#/definitions/errorGeneric"
+            }
+          },
+          "404": {
+            "description": "errorGeneric",
+            "schema": {
+              "$ref": "#/definitions/errorGeneric"
+            }
+          },
+          "default": {
+            "description": "errorGeneric",
+            "schema": {
+              "$ref": "#/definitions/errorGeneric"
+            }
+          }
+        }
+      }
+    },
+    "/admin/identities/{id}/devices/{device_id}": {
+      "patch": {
+        "security": [
+          {
+            "oryAccessToken": []
+          }
+        ],
+        "description": "Partially updates an identity's device's trusted field using [JSON Patch](https://jsonpatch.com/).\nOnly the field `trusted` can be updated using this method. Even that can only be set to `false` using this method.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "http",
+          "https"
+        ],
+        "tags": [
+          "identity"
+        ],
+        "summary": "Patch an Identity's devices",
+        "operationId": "patchIdentityDevices",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "ID is the session's ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "DeviceID is the Identity's Device's ID.",
+            "name": "device_id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/responses/listIdentityDevices"
+          },
+          "400": {
+            "description": "errorGeneric",
+            "schema": {
+              "$ref": "#/definitions/errorGeneric"
+            }
+          },
+          "404": {
+            "description": "errorGeneric",
+            "schema": {
+              "$ref": "#/definitions/errorGeneric"
+            }
+          },
+          "409": {
+            "description": "errorGeneric",
+            "schema": {
+              "$ref": "#/definitions/errorGeneric"
+            }
+          },
+          "default": {
+            "description": "errorGeneric",
+            "schema": {
+              "$ref": "#/definitions/errorGeneric"
+            }
+          }
+        }
+      }
+    },
     "/admin/identities/{id}/sessions": {
       "get": {
         "security": [
@@ -2918,7 +3039,7 @@
     },
     "/self-service/verification": {
       "post": {
-        "description": "Use this endpoint to complete a verification flow. This endpoint\nbehaves differently for API and browser flows and has several states:\n\n`choose_method` expects `flow` (in the URL query) and `email` (in the body) to be sent\nand works with API- and Browser-initiated flows.\nFor API clients and Browser clients with HTTP Header `Accept: application/json` it either returns a HTTP 200 OK when the form is valid and HTTP 400 OK when the form is invalid\nand a HTTP 303 See Other redirect with a fresh verification flow if the flow was otherwise invalid (e.g. expired).\nFor Browser clients without HTTP Header `Accept` or with `Accept: text/*` it returns a HTTP 303 See Other redirect to the Verification UI URL with the Verification Flow ID appended.\n`sent_email` is the success state after `choose_method` when using the `link` method and allows the user to request another verification email. It\nworks for both API and Browser-initiated flows and returns the same responses as the flow in `choose_method` state.\n`passed_challenge` expects a `token` to be sent in the URL query and given the nature of the flow (\"sending a verification link\")\ndoes not have any API capabilities. The server responds with a HTTP 303 See Other redirect either to the Settings UI URL\n(if the link was valid) and instructs the user to update their password, or a redirect to the Verification UI URL with\na new Verification Flow ID which contains an error message that the verification link was invalid.\n\nMore information can be found at [Ory Kratos Email and Phone Verification Documentation](https://www.ory.sh/docs/kratos/self-service/flows/verify-email-account-activation).",
+        "description": "Use this endpoint to complete a verification flow. This endpoint\nbehaves differently for API and browser flows and has several states:\n\n`choose_method` expects `flow` (in the URL query) and `email` OR `sms` (in the body) to be sent\nand works with API- and Browser-initiated flows.\nFor API clients and Browser clients with HTTP Header `Accept: application/json` it either returns a HTTP 200 OK when the form is valid and HTTP 400 OK when the form is invalid\nand a HTTP 303 See Other redirect with a fresh verification flow if the flow was otherwise invalid (e.g. expired).\nFor Browser clients without HTTP Header `Accept` or with `Accept: text/*` it returns a HTTP 303 See Other redirect to the Verification UI URL with the Verification Flow ID appended.\n`sent_email` is the success state after `choose_method` when using the `link` method and allows the user to request another verification email. It\nworks for both API and Browser-initiated flows and returns the same responses as the flow in `choose_method` state.\n`passed_challenge` expects a `token` to be sent in the URL query and given the nature of the flow (\"sending a verification link\")\ndoes not have any API capabilities. The server responds with a HTTP 303 See Other redirect either to the Settings UI URL\n(if the link was valid) and instructs the user to update their password, or a redirect to the Verification UI URL with\na new Verification Flow ID which contains an error message that the verification link was invalid.\n\nMore information can be found at [Ory Kratos Email and Phone Verification Documentation](https://www.ory.sh/docs/kratos/self-service/flows/verify-email-account-activation).",
         "consumes": [
           "application/json",
           "application/x-www-form-urlencoded"
@@ -3039,7 +3160,7 @@
     },
     "/self-service/verification/browser": {
       "get": {
-        "description": "This endpoint initializes a browser-based account verification flow. Once initialized, the browser will be redirected to\n`selfservice.flows.verification.ui_url` with the flow ID set as the query parameter `?flow=`.\n\nIf this endpoint is called via an AJAX request, the response contains the recovery flow without any redirects.\n\nThis endpoint is NOT INTENDED for API clients and only works with browsers (Chrome, Firefox, ...).\n\nMore information can be found at [Ory Kratos Email and Phone Verification Documentation](https://www.ory.sh/docs/kratos/self-service/flows/verify-email-account-activation).",
+        "description": "This endpoint initializes a browser-based account verification flow. Once initialized, the browser will be redirected to\n`selfservice.flows.verification.ui_url` with the flow ID set as the query parameter `?flow=`.\n\nIf this endpoint is called via an AJAX request, the response contains the verification flow without any redirects.\n\nThis endpoint is NOT INTENDED for API clients and only works with browsers (Chrome, Firefox, ...).\n\nMore information can be found at [Ory Kratos Email and Phone Verification Documentation](https://www.ory.sh/docs/kratos/self-service/flows/verify-email-account-activation).",
         "schemes": [
           "http",
           "https"
@@ -3979,7 +4100,7 @@
       }
     },
     "continueWithSetOrySessionToken": {
-      "description": "Indicates that a session was issued, and the application should use this token for authenticated requests",
+      "description": "ContinueWithSetOrySessionToken Indicates that a session was issued, and the application should use this token for authenticated requests",
       "type": "object",
       "required": [
         "action",
@@ -4515,6 +4636,9 @@
           "items": {
             "$ref": "#/definitions/identityCredentialsCodeAddress"
           }
+        },
+        "disabled": {
+          "type": "boolean"
         }
       }
     },
@@ -5440,6 +5564,10 @@
           "type": "string",
           "format": "date-time"
         },
+        "device_trust_based": {
+          "description": "DeviceTrustBased indicates that this authentication method was added due to device trust",
+          "type": "boolean"
+        },
         "method": {
           "description": "The method used in this authenticator.\npassword CredentialsTypePassword\noidc CredentialsTypeOIDC\ntotp CredentialsTypeTOTP\nlookup_secret CredentialsTypeLookup\nwebauthn CredentialsTypeWebAuthn\ncode CredentialsTypeCodeAuth\npasskey CredentialsTypePasskey\nprofile CredentialsTypeProfile\nsaml CredentialsTypeSAML\nlink_recovery CredentialsTypeRecoveryLink  CredentialsTypeRecoveryLink is a special credential type linked to the link strategy (recovery flow).  It is not used within the credentials object itself.\ncode_recovery CredentialsTypeRecoveryCode",
           "type": "string",
@@ -5483,6 +5611,9 @@
         "id"
       ],
       "properties": {
+        "authentication_methods": {
+          "$ref": "#/definitions/sessionAuthenticationMethods"
+        },
         "id": {
           "description": "Device record ID",
           "type": "string",
@@ -5495,6 +5626,10 @@
         "location": {
           "description": "Geo Location corresponding to the IP Address",
           "type": "string"
+        },
+        "trusted": {
+          "description": "Is this device trusted? (only matters if this device submitted aal2+ credentials)",
+          "type": "boolean"
         },
         "user_agent": {
           "description": "UserAgent of the client",
@@ -6219,6 +6354,10 @@
         "transient_payload": {
           "description": "Transient data to pass along to any webhooks",
           "type": "object"
+        },
+        "trust_device": {
+          "description": "Trust this device",
+          "type": "boolean"
         }
       }
     },
@@ -6417,6 +6556,10 @@
         "transient_payload": {
           "description": "Transient data to pass along to any webhooks",
           "type": "object"
+        },
+        "trust_device": {
+          "description": "Trust this device",
+          "type": "boolean"
         }
       }
     },
@@ -6646,7 +6789,7 @@
       }
     },
     "updateRegistrationFlowWithPasswordMethod": {
-      "description": "Update Registration Flow with Password Method",
+      "description": "UpdateRegistrationFlowWithPasswordMethod Update Registration Flow with Password Method",
       "type": "object",
       "required": [
         "password",
@@ -6778,6 +6921,39 @@
     "updateSettingsFlowBody": {
       "description": "Update Settings Flow Request Body",
       "type": "object"
+    },
+    "updateSettingsFlowWithCodeMethod": {
+      "description": "Update Settings Flow with Lookup Method",
+      "type": "object",
+      "required": [
+        "method"
+      ],
+      "properties": {
+        "code_device_untrust": {
+          "description": "DeviceUntrust if set, will untrust this device id for this aal2 method for this account",
+          "type": "string"
+        },
+        "code_disable": {
+          "description": "CodeEnable if set to true will disable the code credential method",
+          "type": "boolean"
+        },
+        "code_enable": {
+          "description": "CodeEnable if set to true will enable the code credential method",
+          "type": "boolean"
+        },
+        "csrf_token": {
+          "description": "CSRFToken is the anti-CSRF token",
+          "type": "string"
+        },
+        "method": {
+          "description": "Method\n\nShould be set to \"code\" when trying to enable or disable the credential method.",
+          "type": "string"
+        },
+        "transient_payload": {
+          "description": "Transient data to pass along to any webhooks",
+          "type": "object"
+        }
+      }
     },
     "updateSettingsFlowWithLookupMethod": {
       "description": "Update Settings Flow with Lookup Method",
@@ -6986,6 +7162,10 @@
           "description": "ValidationTOTP must contain a valid TOTP based on the",
           "type": "string"
         },
+        "totp_device_untrust": {
+          "description": "DeviceUntrust if true, will untrust this device id for this aal2 method for this account",
+          "type": "string"
+        },
         "totp_unlink": {
           "description": "UnlinkTOTP if true will remove the TOTP pairing,\neffectively removing the credential. This can be used\nto set up a new TOTP device.",
           "type": "boolean"
@@ -7040,7 +7220,7 @@
       ],
       "properties": {
         "code": {
-          "description": "Code from the recovery email\n\nIf you want to submit a code, use this field, but make sure to _not_ include the email field, as well.",
+          "description": "Code from the verification email\n\nIf you want to submit a code, use this field, but make sure to _not_ include the email field, as well.",
           "type": "string"
         },
         "csrf_token": {
@@ -7048,7 +7228,7 @@
           "type": "string"
         },
         "email": {
-          "description": "The email address to verify\n\nIf the email belongs to a valid account, a verifiation email will be sent.\n\nIf you want to notify the email address if the account does not exist, see\nthe [notify_unknown_recipients flag](https://www.ory.sh/docs/kratos/self-service/flows/verify-email-account-activation#attempted-verification-notifications)\n\nIf a code was already sent, including this field in the payload will invalidate the sent code and re-send a new code.\n\nformat: email",
+          "description": "Email address to verify\n\nIf the email belongs to a valid account, a verification email will be sent.\n\nIf you want to notify the email address if the account does not exist, see\nthe [notify_unknown_recipients flag](https://www.ory.sh/docs/kratos/self-service/flows/verify-email-account-activation#attempted-verification-notifications)\n\nIf a code was already sent, including this field in the payload will invalidate the sent code and re-send a new code.\n\nformat: email",
           "type": "string"
         },
         "method": {
@@ -7059,6 +7239,10 @@
             "code"
           ],
           "x-go-enum-desc": "link VerificationStrategyLink\ncode VerificationStrategyCode"
+        },
+        "sms": {
+          "description": "PhoneNumber to verify\n\nIf the phone number belongs to a valid account, a verification sms will be sent.\n\nIf you want to notify the phone number if the account does not exist, see\nthe [notify_unknown_recipients flag](https://www.ory.sh/docs/kratos/self-service/flows/verify-email-account-activation#attempted-verification-notifications)\n\nIf a code was already sent, including this field in the payload will invalidate the sent code and re-send a new code.\n\nformat: tel",
+          "type": "string"
         },
         "transient_payload": {
           "description": "Transient data to pass along to any webhooks",
@@ -7107,6 +7291,11 @@
         "status"
       ],
       "properties": {
+        "active_verification_flow": {
+          "description": "ActiveVerificationFlow represents the active verification flow for this address\nThis is a resolved field based on the verification codes and flows",
+          "type": "string",
+          "format": "uuid"
+        },
         "created_at": {
           "description": "When this entry was created",
           "type": "string",
@@ -7153,7 +7342,7 @@
     "verificationFlow": {
       "description": "Used to verify an out-of-band communication\nchannel such as an email address or a phone number.\n\nFor more information head over to: https://www.ory.sh/docs/kratos/self-service/flows/verify-email-account-activation",
       "type": "object",
-      "title": "A Verification Flow",
+      "title": "Flow A Verification Flow",
       "required": [
         "id",
         "type",
@@ -7269,6 +7458,15 @@
           "type": "integer",
           "format": "int64",
           "description": "The X-Total-Count HTTP Header\n\nThe `X-Total-Count` header contains the total number of items in the collection.\n\nDEPRECATED: This header will be removed eventually. Please use the `Link` header\ninstead to check whether you are on the last page."
+        }
+      }
+    },
+    "listIdentityDevices": {
+      "description": "List Identity Devices Response",
+      "schema": {
+        "type": "array",
+        "items": {
+          "$ref": "#/definitions/sessionDevice"
         }
       }
     },

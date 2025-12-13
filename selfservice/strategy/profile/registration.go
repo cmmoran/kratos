@@ -311,11 +311,11 @@ func (s *Strategy) showCredentialsSelection(ctx context.Context, w http.Response
 		return s.handleRegistrationError(r, regFlow, params, err)
 	}
 
-	if err := registration.SortNodes(r.Context(), regFlow.UI.Nodes, ds.String()); err != nil {
+	if err = registration.SortNodes(r.Context(), regFlow.UI.Nodes, ds.String()); err != nil {
 		return s.handleRegistrationError(r, regFlow, params, err)
 	}
 
-	if err := s.d.RegistrationFlowPersister().UpdateRegistrationFlow(ctx, regFlow); err != nil {
+	if err = s.d.RegistrationFlowPersister().UpdateRegistrationFlow(ctx, regFlow); err != nil {
 		return s.handleRegistrationError(r, regFlow, params, err)
 	}
 

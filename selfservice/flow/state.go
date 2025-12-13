@@ -12,7 +12,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Flow State
+// State
 //
 // The state represents the state of the verification flow.
 //
@@ -33,6 +33,7 @@ const (
 	// Note: this state should actually be called `StateMessageSent`,
 	// where a 'Message' is a code or link sent to an address (e.g. `email`, `sms`, etc).
 	StateEmailSent       State = "sent_email"
+	StateSmsSent         State = "sent_sms"
 	StatePassedChallenge State = "passed_challenge"
 	StateShowForm        State = "show_form"
 	StateSuccess         State = "success"
@@ -53,14 +54,33 @@ const (
 	// - ./state_recovery_v2.mermaid
 )
 
-var states = []State{
+type StateKey string
+
+func keyFor(current State, via ...string) StateKey {
+	if len(via) == 0 {
+		return StateKey(current.String())
+	}
+	return StateKey(current.String() + "_" + via[0])
+}
+
+var states = map[StateKey]State{
+	keyFor(StateChooseMethod):          StateEmailSent,
+	keyFor(StateChooseMethod, "email"): StateEmailSent,
+	keyFor(StateChooseMethod, "sms"):   StateSmsSent,
+	keyFor(StateEmailSent):             StatePassedChallenge,
+	keyFor(StateSmsSent):               StatePassedChallenge,
+	keyFor(StatePassedChallenge):       StatePassedChallenge,
+}
+
+var statesOrder = []State{
 	StateChooseMethod,
 	StateEmailSent,
+	StateSmsSent,
 	StatePassedChallenge,
 }
 
 func indexOf(current State) int {
-	for k, s := range states {
+	for k, s := range statesOrder {
 		if s == current {
 			return k
 		}
@@ -69,6 +89,12 @@ func indexOf(current State) int {
 }
 
 func HasReachedState(expected, actual State) bool {
+	if expected == StateSmsSent {
+		expected = StateEmailSent
+	}
+	if actual == StateSmsSent {
+		actual = StateEmailSent
+	}
 	return indexOf(actual) >= indexOf(expected)
 }
 
@@ -76,12 +102,12 @@ func IsStateRecoveryV2(state State) bool {
 	return strings.HasPrefix(state.String(), "recovery_")
 }
 
-func NextState(current State) State {
-	if current == StatePassedChallenge {
-		return StatePassedChallenge
+func NextState(current State, via ...string) State {
+	if state, ok := states[keyFor(current, via...)]; ok {
+		return state
 	}
 
-	return states[indexOf(current)+1]
+	return StateChooseMethod
 }
 
 // For some reason using sqlxx.NullString as the State type does not work here.

@@ -70,6 +70,34 @@ func (p *Persister) UseVerificationCode(ctx context.Context, flowID uuid.UUID, u
 	return codeRow, nil
 }
 
+func (p *Persister) GetActiveVerificationFlows(ctx context.Context, identity uuid.UUID) (_ []*code.ActiveVerificationFlow, err error) {
+	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.GetActiveVerificationFlows")
+	defer otelx.End(span, &err)
+
+	nid := p.NetworkID(ctx)
+
+	var avfs []*code.ActiveVerificationFlow
+	if err = p.GetConnection(ctx).
+		RawQuery(`
+SELECT s.ID AS "flow_id",
+       i.VerifiableAddress AS "verifiable_address",
+       i.ExpiresAt AS "expires_at",
+       i.IssuedAt AS "issued_at"
+FROM selfservice_verification_flows s, identity_verification_codes i
+WHERE s.ID = i.selfservice_verification_flow_id
+  AND i.nid = ?
+  AND s.nid = i.nid
+  AND s.identity_id = ?
+  AND i.used_at IS NULL`,
+			nid,
+			identity,
+		).All(&avfs); err != nil {
+		return nil, err
+	}
+
+	return avfs, nil
+}
+
 func (p *Persister) DeleteVerificationCodesOfFlow(ctx context.Context, fID uuid.UUID) (err error) {
 	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.DeleteVerificationCodesOfFlow")
 	defer otelx.End(span, &err)

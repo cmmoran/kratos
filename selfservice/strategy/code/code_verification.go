@@ -95,3 +95,20 @@ type CreateVerificationCodeParams struct {
 	// FlowID is the id of the current verification flow
 	FlowID uuid.UUID
 }
+
+type ActiveVerificationFlow struct {
+	// FlowID is the flow associated with the verification code
+	FlowID uuid.UUID `json:"flow_id" faker:"-" db:"-"`
+
+	// VerifiableAddress links this code to a verification address.
+	// required: true
+	VerifiableAddress *identity.VerifiableAddress `json:"verification_address" faker:"-" db:"verifiable_address"`
+
+	// ExpiresAt is the time (UTC) when the code expires.
+	// required: true
+	ExpiresAt time.Time `json:"expires_at" faker:"time_type" db:"expires_at"`
+
+	// IssuedAt is the time (UTC) when the code was issued.
+	// required: true
+	IssuedAt time.Time `json:"issued_at" faker:"time_type" db:"issued_at"`
+}

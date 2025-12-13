@@ -7,15 +7,25 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
+
+	"github.com/gofrs/uuid"
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/ory/herodot"
+	"github.com/ory/x/decoderx"
+	"github.com/ory/x/otelx"
+	"github.com/ory/x/pointerx"
+	"github.com/ory/x/sqlcon"
+	"github.com/ory/x/sqlxx"
+
 	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/schema"
@@ -26,11 +36,6 @@ import (
 	"github.com/ory/kratos/text"
 	"github.com/ory/kratos/ui/node"
 	"github.com/ory/kratos/x"
-	"github.com/ory/x/decoderx"
-	"github.com/ory/x/otelx"
-	"github.com/ory/x/pointerx"
-	"github.com/ory/x/sqlcon"
-	"github.com/ory/x/sqlxx"
 )
 
 var (
@@ -70,6 +75,11 @@ type updateLoginFlowWithCodeMethod struct {
 	// Resend is set when the user wants to resend the code
 	// required: false
 	Resend string `json:"resend" form:"resend"`
+
+	// Trust this device
+	//
+	// required: false
+	TrustDevice bool `json:"trust_device" form:"trust_device"`
 
 	// Transient data to pass along to any webhooks
 	//
@@ -220,7 +230,7 @@ func (s *Strategy) Login(w http.ResponseWriter, r *http.Request, f *login.Flow, 
 
 	f.TransientPayload = p.TransientPayload
 
-	if err := flow.EnsureCSRF(s.deps, r, f.Type, s.deps.Config().DisableAPIFlowEnforcement(ctx), s.deps.GenerateCSRFToken, p.CSRFToken); err != nil {
+	if err = flow.EnsureCSRF(s.deps, r, f.Type, s.deps.Config().DisableAPIFlowEnforcement(ctx), s.deps.GenerateCSRFToken, p.CSRFToken); err != nil {
 		return nil, s.HandleLoginError(r, f, &p, err, false)
 	}
 
@@ -240,10 +250,28 @@ func (s *Strategy) Login(w http.ResponseWriter, r *http.Request, f *login.Flow, 
 			return nil, s.HandleLoginError(r, f, &p, err, false)
 		}
 		return nil, nil
-	case flow.StateEmailSent:
+	case flow.StateEmailSent, flow.StateSmsSent:
 		i, err := s.loginVerifyCode(ctx, f, &p, sess)
 		if err != nil {
 			return nil, s.HandleLoginError(r, f, &p, err, true)
+		}
+		if p.TrustDevice {
+			currentDevice := sess.SetSessionDeviceInformation(r.WithContext(ctx))
+			if currentDevice.DeviceTrustConfidence(sess.Devices) > 0.0 {
+				method := s.CompletedAuthenticationMethod(ctx)
+				method.DeviceTrustBased = true
+				method.CompletedAt = time.Now().UTC()
+				if currentDevice.SessionID == uuid.Nil || currentDevice.SessionID != sess.ID {
+					s.deps.Audit().WithRequest(r).WithField("current_device", *currentDevice).Warn("current device session id mismatch")
+					(*currentDevice).SessionID = sess.ID
+				}
+				(*currentDevice).TrustPending = pointerx.Ptr(p.TrustDevice)
+				(*currentDevice).AMR = append((*currentDevice).AMR, method)
+				s.deps.Audit().WithRequest(r).WithField("current_device", *currentDevice).WithField("devices", sess.Devices).WithField("amr", method).Debug("setting device to trusted")
+				if err = s.deps.SessionPersister().UpsertDevice(ctx, currentDevice); err != nil {
+					return i, errors.WithStack(herodot.ErrInternalServerError.WithReason("Could not update device").WithDebug(err.Error()))
+				}
+			}
 		}
 		return i, nil
 	case flow.StatePassedChallenge:
@@ -467,7 +495,7 @@ func (s *Strategy) findIdentityForIdentifier(ctx context.Context, identifier str
 		)
 
 		var conf identity.CredentialsCode
-		if err := json.Unmarshal(cred.Config, &conf); err != nil {
+		if err = json.Unmarshal(cred.Config, &conf); err != nil {
 			return nil, nil, errors.WithStack(err)
 		}
 
@@ -493,20 +521,29 @@ func (s *Strategy) loginSendCode(ctx context.Context, w http.ResponseWriter, r *
 	}
 
 	// Step 2: Delete any previous login codes for this flow ID
-	if err := s.deps.LoginCodePersister().DeleteLoginCodesOfFlow(ctx, f.GetID()); err != nil {
+	if err = s.deps.LoginCodePersister().DeleteLoginCodesOfFlow(ctx, f.GetID()); err != nil {
 		return errors.WithStack(err)
 	}
 
-	// kratos only supports `email` identifiers at the moment with the code method
-	// this is validated in the identity validation step above
-	if err := s.deps.CodeSender().SendCode(ctx, f, id, addresses...); err != nil {
+	if err = s.deps.CodeSender().SendCode(ctx, f, id, addresses...); err != nil {
 		return errors.WithStack(err)
 	}
 
+	// addresses is an array but they should all be the same _via_
 	// sets the flow state to code sent
-	f.SetState(flow.NextState(f.GetState()))
+	via := addresses[0].Via
+	f.SetState(flow.NextState(f.GetState(), string(via)))
 
-	if err := s.NewCodeUINodes(r, f, &codeIdentifier{Identifier: identifier}); err != nil {
+	// we're only interested in keeping the address(es) we just sent the code to
+	for _, n := range f.GetUI().Nodes {
+		if n.ID() == "address" && !slices.ContainsFunc(addresses, func(addr Address) bool {
+			return addr.To == x.GracefulNormalization(fmt.Sprintf("%v", n.GetValue()))
+		}) {
+			f.GetUI().Nodes.RemoveMatching(n)
+		}
+	}
+
+	if err = s.NewCodeUINodes(r, f, &codeIdentifier{Identifier: identifier}); err != nil {
 		return err
 	}
 
@@ -583,14 +620,15 @@ func (s *Strategy) loginVerifyCode(ctx context.Context, f *login.Flow, p *update
 
 	// since nothing has errored yet, we can assume that the code is correct
 	// and we can update the login flow
-	f.SetState(flow.NextState(f.GetState()))
+	via := loginCode.AddressType
+	f.SetState(flow.NextState(f.GetState(), string(via)))
 
-	if err := s.deps.LoginFlowPersister().UpdateLoginFlow(ctx, f); err != nil {
+	if err = s.deps.LoginFlowPersister().UpdateLoginFlow(ctx, f); err != nil {
 		return nil, errors.WithStack(err)
 	}
 
 	// Step 3: Verify the address
-	if err := s.verifyAddress(ctx, i, Address{
+	if err = s.verifyAddress(ctx, i, Address{
 		To:  loginCode.Address,
 		Via: loginCode.AddressType,
 	}, true); err != nil {
@@ -672,9 +710,7 @@ func (s *Strategy) PopulateLoginMethodIdentifierFirstCredentials(r *http.Request
 		return errors.WithStack(idfirst.ErrNoCredentialsFound)
 	}
 
-	f.GetUI().Nodes.Append(
-		node.NewInputField("method", s.ID(), node.CodeGroup, node.InputAttributeTypeSubmit).WithMetaLabel(text.NewInfoSelfServiceLoginCode()),
-	)
+	f.GetUI().Nodes.Append(node.NewInputField("method", s.ID(), node.CodeGroup, node.InputAttributeTypeSubmit).WithMetaLabel(text.NewInfoSelfServiceLoginCode()))
 	return nil
 }
 

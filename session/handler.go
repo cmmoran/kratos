@@ -72,9 +72,11 @@ const (
 )
 
 const (
-	AdminRouteIdentity           = "/identities"
-	AdminRouteIdentitiesSessions = AdminRouteIdentity + "/{id}/sessions"
-	AdminRouteSessionExtendId    = RouteSession + "/extend"
+	AdminRouteIdentity              = "/identities"
+	AdminRouteIdentitiesSessions    = AdminRouteIdentity + "/{id}/sessions"
+	AdminRouteIdentitiesDevices     = AdminRouteIdentity + "/{id}/devices"
+	AdminRouteIdentitiesPatchDevice = AdminRouteIdentity + "/{id}/devices/{device_id}"
+	AdminRouteSessionExtendId       = RouteSession + "/extend"
 )
 
 func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
@@ -83,8 +85,10 @@ func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
 	admin.DELETE(RouteSession, h.disableSession)
 
 	admin.GET(AdminRouteIdentitiesSessions, h.listIdentitySessions)
+	admin.GET(AdminRouteIdentitiesDevices, h.listIdentityDevices)
 	admin.DELETE(AdminRouteIdentitiesSessions, h.deleteIdentitySessions)
 	admin.PATCH(AdminRouteSessionExtendId, h.adminSessionExtend)
+	admin.PATCH(AdminRouteIdentitiesPatchDevice, h.patchIdentityDevices)
 
 	admin.DELETE(RouteCollection, redir.RedirectToPublicRoute(h.r))
 }
@@ -97,6 +101,7 @@ func (h *Handler) RegisterPublicRoutes(public *x.RouterPublic) {
 	h.r.CSRFHandler().IgnoreGlob(RouteCollection + "/*")
 	h.r.CSRFHandler().IgnoreGlob(RouteCollection + "/*/extend")
 	h.r.CSRFHandler().IgnoreGlob(AdminRouteIdentity + "/*/sessions")
+	h.r.CSRFHandler().IgnoreGlob(AdminRouteIdentity + "/*/devices")
 
 	for _, m := range []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodConnect, http.MethodOptions, http.MethodTrace} {
 		public.Handler(m, RouteWhoami, http.HandlerFunc(h.whoami))
@@ -637,6 +642,63 @@ func (h *Handler) listIdentitySessions(w http.ResponseWriter, r *http.Request) {
 	h.r.Writer().Write(w, r, sess)
 }
 
+// List Identity Devices Parameters
+//
+// swagger:parameters listIdentityDevices
+//
+//nolint:deadcode,unused
+//lint:ignore U1000 Used to generate Swagger and OpenAPI definitions
+type listIdentityDevicesRequest struct {
+	// ID is the identity's ID.
+	//
+	// required: true
+	// in: path
+	ID string `json:"id"`
+}
+
+// List Identity Devices Response
+//
+// swagger:response listIdentityDevices
+//
+//nolint:deadcode,unused
+//lint:ignore U1000 Used to generate Swagger and OpenAPI definitions
+type listIdentityDevicesResponse struct {
+	// in: body
+	Body []Device
+}
+
+// swagger:route GET /admin/identities/{id}/devices identity listIdentityDevices
+//
+// # List an Identity's trusted devices
+//
+// This endpoint returns all trusted devices for any sessions that belong to the given Identity.
+//
+//	Schemes: http, https
+//
+//	Security:
+//	  oryAccessToken:
+//
+//	Responses:
+//	  200: listIdentityDevices
+//	  400: errorGeneric
+//	  404: errorGeneric
+//	  default: errorGeneric
+func (h *Handler) listIdentityDevices(w http.ResponseWriter, r *http.Request) {
+	iID, err := uuid.FromString(r.PathValue("id"))
+	if err != nil {
+		h.r.Writer().WriteError(w, r, errors.WithStack(herodot.ErrBadRequest.WithError(err.Error()).WithDebug("could not parse UUID")))
+		return
+	}
+
+	devices, err := h.r.SessionPersister().ListTrustedDevicesByIdentity(r.Context(), iID)
+	if err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+
+	h.r.Writer().Write(w, r, devices)
+}
+
 // Deleted Session Count
 //
 // swagger:model deleteMySessionsCount
@@ -947,6 +1009,72 @@ func (h *Handler) adminSessionExtend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.r.Writer().Write(w, r, s)
+}
+
+// swagger:parameters patchIdentityDevices
+//
+//nolint:deadcode,unused
+//lint:ignore U1000 Used to generate Swagger and OpenAPI definitions
+type patchIdentityDevices struct {
+	// ID is the session's ID.
+	//
+	// required: true
+	// in: path
+	ID string `json:"id"`
+
+	// DeviceID is the Identity's Device's ID.
+	//
+	// required: true
+	// in: path
+	DeviceID string `json:"device_id"`
+}
+
+// swagger:route PATCH /admin/identities/{id}/devices/{device_id} identity patchIdentityDevices
+//
+// # Patch an Identity's devices
+//
+// Partially updates an identity's device's trusted field using [JSON Patch](https://jsonpatch.com/).
+// Only the field `trusted` can be updated using this method. Even that can only be set to `false` using this method.
+//
+//	Consumes:
+//	- application/json
+//
+//	Produces:
+//	- application/json
+//
+//	Schemes: http, https
+//
+//	Security:
+//	  oryAccessToken:
+//
+//	Responses:
+//	  200: listIdentityDevices
+//	  400: errorGeneric
+//	  404: errorGeneric
+//	  409: errorGeneric
+//	  default: errorGeneric
+func (h *Handler) patchIdentityDevices(w http.ResponseWriter, r *http.Request) {
+	id := x.ParseUUID(r.PathValue("id"))
+	deviceId := x.ParseUUID(r.PathValue("device_id"))
+
+	devices, err := h.r.SessionPersister().ListTrustedDevicesByIdentity(r.Context(), id)
+	if err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+
+	for i := range devices {
+		dev := &(devices[i])
+		if dev.ID == deviceId && dev.Trusted {
+			dev.Trusted = false
+			if err = h.r.SessionPersister().UpsertDevice(r.Context(), dev); err != nil {
+				h.r.Writer().WriteError(w, r, err)
+				return
+			}
+		}
+	}
+
+	h.r.Writer().Write(w, r, devices)
 }
 
 func (h *Handler) IsNotAuthenticated(wrap http.HandlerFunc, onAuthenticated http.HandlerFunc) http.HandlerFunc {

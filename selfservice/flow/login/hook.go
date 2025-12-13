@@ -169,7 +169,9 @@ func (e *HookExecutor) PostLoginHook(
 	})...)
 
 	if f.Type == flow.TypeBrowser && x.IsJSONRequest(r) {
+		e.d.Audit().WithRequest(r).WithField("identity_id", i.ID).WithField("continue_with", f.ContinueWith()).Info("Adding post login flow continue_with")
 		f.AddContinueWith(flow.NewContinueWithRedirectBrowserTo(returnTo.String()))
+		e.d.Audit().WithRequest(r).WithField("identity_id", i.ID).WithField("continue_with", f.ContinueWith()).Info("Add post login flow continue_with")
 	}
 
 	classified := s
@@ -179,7 +181,7 @@ func (e *HookExecutor) PostLoginHook(
 		WithRequest(r).
 		WithField("identity_id", i.ID).
 		WithField("flow_method", f.Active).
-		Debug("Running ExecuteLoginPostHook.")
+		Trace("Running ExecuteLoginPostHook.")
 	hooks, err := e.d.PostLoginHooks(ctx, f.Active)
 	if err != nil {
 		return err
@@ -210,7 +212,7 @@ func (e *HookExecutor) PostLoginHook(
 			WithField("executors", PostHookExecutorNames(hooks)).
 			WithField("identity_id", i.ID).
 			WithField("flow_method", f.Active).
-			Debug("ExecuteLoginPostHook completed successfully.")
+			Trace("ExecuteLoginPostHook completed successfully.")
 	}
 
 	if f.Type == flow.TypeAPI {
@@ -382,6 +384,11 @@ func (e *HookExecutor) PostLoginHook(
 	} else if f.ReturnToVerification != "" {
 		finalReturnTo = f.ReturnToVerification
 		span.SetAttributes(attribute.String("redirect_reason", "verification requested"))
+	}
+	if x.IsBrowserRequest(r) && f.HasContinueWithRedirect() {
+		e.d.Audit().WithField("continue_with", f.ContinueWith()).WithField("identity_id", i.ID).WithField("flow_method", f.Active).Info("Redirecting to continue_with.")
+		redir.ContentNegotiationRedirection(w, r, s, e.d.Writer(), f.ContinueWithRedirect().RedirectUrl())
+		return nil
 	}
 
 	redir.ContentNegotiationRedirection(w, r, s, e.d.Writer(), finalReturnTo)

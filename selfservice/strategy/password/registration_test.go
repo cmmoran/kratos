@@ -21,6 +21,11 @@ import (
 
 	"github.com/ory/kratos/selfservice/flow/login"
 
+	"github.com/ory/kratos/x/nosurfx"
+	"github.com/ory/x/assertx"
+	"github.com/ory/x/snapshotx"
+	"github.com/ory/x/sqlcon"
+
 	"github.com/ory/kratos/driver"
 	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/identity"
@@ -34,10 +39,6 @@ import (
 	"github.com/ory/kratos/ui/container"
 	"github.com/ory/kratos/ui/node"
 	"github.com/ory/kratos/x"
-	"github.com/ory/kratos/x/nosurfx"
-	"github.com/ory/x/assertx"
-	"github.com/ory/x/snapshotx"
-	"github.com/ory/x/sqlcon"
 )
 
 var flows = []string{"spa", "api", "browser"}

@@ -30,6 +30,7 @@ import (
 	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/persistence"
 	"github.com/ory/kratos/persistence/sql"
+	"github.com/ory/kratos/request"
 	"github.com/ory/kratos/schema"
 	"github.com/ory/kratos/selfservice/errorx"
 	"github.com/ory/kratos/selfservice/flow/login"
@@ -850,9 +851,19 @@ func (m *RegistryDefault) PrometheusManager() *prometheusx.MetricsManager {
 	return m.pmm
 }
 
-func (m *RegistryDefault) HTTPClient(_ context.Context, opts ...httpx.ResilientOptions) *retryablehttp.Client {
+func (m *RegistryDefault) HTTPClient(ctx context.Context, opts ...httpx.ResilientOptions) *retryablehttp.Client {
+	l := m.Logger()
+	fields := []request.ContextHeader{"x-correlation-id", "x-session-entropy"}
+	for _, f := range fields {
+		fRaw := ctx.Value(f)
+		if fRaw != nil {
+			if fVal := fRaw.(string); fVal != "" {
+				l = l.WithField(string(f), fVal)
+			}
+		}
+	}
 	opts = append(opts,
-		httpx.ResilientClientWithLogger(m.Logger()),
+		httpx.ResilientClientWithLogger(l),
 		httpx.ResilientClientWithMaxRetry(2),
 		httpx.ResilientClientWithConnectionTimeout(30*time.Second),
 	)

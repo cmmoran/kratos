@@ -20,19 +20,14 @@ func NewErrorValidationVerificationFlowExpired(expiredAt time.Time) *Message {
 	}
 }
 
-func NewInfoSelfServiceVerificationSuccessful() *Message {
+func NewInfoSelfServiceVerificationSuccessful(channel string) *Message {
 	return &Message{
 		ID:   InfoSelfServiceVerificationSuccessful,
 		Type: Success,
-		Text: "You successfully verified your email address.",
-	}
-}
-
-func NewVerificationEmailSent() *Message {
-	return &Message{
-		ID:   InfoSelfServiceVerificationEmailSent,
-		Type: Info,
-		Text: "An email containing a verification link has been sent to the email address you provided. If you have not received an email, check the spelling of the address and make sure to use the address you registered with.",
+		Text: fmt.Sprintf("You successfully verified your %s.", channel),
+		Context: context(map[string]any{
+			"channel": channel,
+		}),
 	}
 }
 
@@ -68,10 +63,14 @@ func NewErrorValidationVerificationCodeInvalidOrAlreadyUsed() *Message {
 	}
 }
 
-func NewVerificationEmailWithCodeSent() *Message {
+func NewVerificationCodeSent(channel, strategy string) *Message {
 	return &Message{
-		ID:   InfoSelfServiceVerificationEmailWithCodeSent,
+		ID:   InfoSelfServiceVerificationCodeSent,
 		Type: Info,
-		Text: "An email containing a verification code has been sent to the email address you provided. If you have not received an email, check the spelling of the address and make sure to use the address you registered with.",
+		Text: fmt.Sprintf("A verification %s has been sent to the %s you provided.", strategy, channel),
+		Context: context(map[string]any{
+			"strategy": strategy,
+			"channel":  channel,
+		}),
 	}
 }

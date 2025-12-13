@@ -34,13 +34,11 @@ func TestIDs(t *testing.T) {
 	assert.Equal(t, 1070004, int(InfoNodeLabelID))
 	assert.Equal(t, 1070005, int(InfoNodeLabelSubmit))
 	assert.Equal(t, 1070006, int(InfoNodeLabelVerifyOTP))
-	assert.Equal(t, 1070007, int(InfoNodeLabelEmail))
-	assert.Equal(t, 1070008, int(InfoNodeLabelResendOTP))
+	assert.Equal(t, 1070007, int(InfoNodeLabelChannel))
+	assert.Equal(t, 1070008, int(InfoNodeLabelResendCode))
 	assert.Equal(t, 1070009, int(InfoNodeLabelContinue))
 	assert.Equal(t, 1070010, int(InfoNodeLabelRecoveryCode))
 	assert.Equal(t, 1070011, int(InfoNodeLabelVerificationCode))
-
-	assert.Equal(t, 1080000, int(InfoSelfServiceVerification))
 
 	assert.Equal(t, 4000000, int(ErrorValidation))
 	assert.Equal(t, 4000001, int(ErrorValidationGeneric))
@@ -68,9 +66,9 @@ func TestIDs(t *testing.T) {
 	assert.Equal(t, 4070006, int(ErrorValidationVerificationCodeInvalidOrAlreadyUsed))
 
 	assert.Equal(t, 1080000, int(InfoSelfServiceVerification))
-	assert.Equal(t, 1080001, int(InfoSelfServiceVerificationEmailSent))
+	//assert.Equal(t, 1080001, int(InfoSelfServiceVerificationEmailSent))
 	assert.Equal(t, 1080002, int(InfoSelfServiceVerificationSuccessful))
-	assert.Equal(t, 1080003, int(InfoSelfServiceVerificationEmailWithCodeSent))
+	assert.Equal(t, 1080003, int(InfoSelfServiceVerificationCodeSent))
 
 	assert.Equal(t, 1070015, int(InfoNodeLabelCaptcha))
 	assert.Equal(t, 4000038, int(ErrorValidationCaptchaError))

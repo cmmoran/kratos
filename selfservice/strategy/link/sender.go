@@ -136,7 +136,7 @@ func (s *Sender) SendVerificationLink(ctx context.Context, f *verification.Flow,
 		}
 		if !notifyUnknownRecipients {
 			// do nothing
-		} else if err := s.send(ctx, string(via), email.NewVerificationInvalid(s.r, &email.VerificationInvalidModel{
+		} else if err := s.send(ctx, via, email.NewVerificationInvalid(s.r, &email.VerificationInvalidModel{
 			To:               to,
 			RequestURL:       f.GetRequestURL(),
 			TransientPayload: transientPayload,

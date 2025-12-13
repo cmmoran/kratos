@@ -294,3 +294,27 @@ func (f *Flow) ToLoggerField() map[string]any {
 		"requested_aal": f.RequestedAAL,
 	}
 }
+
+func (f *Flow) HasContinueWithRedirect() bool {
+	if len(f.ContinueWithItems) > 0 {
+		for _, item := range f.ContinueWithItems {
+			if _, ok := item.(flow.ContinueWithRedirect); ok {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+func (f *Flow) ContinueWithRedirect() flow.ContinueWithRedirect {
+	//@TODO: sort by priority
+	if len(f.ContinueWithItems) > 0 {
+		for _, item := range f.ContinueWithItems {
+			if cwr, ok := item.(flow.ContinueWithRedirect); ok {
+				return cwr
+			}
+		}
+	}
+
+	return nil
+}

@@ -169,7 +169,8 @@ func (e *HookExecutor) PostSettingsHook(ctx context.Context, w http.ResponseWrit
 
 	// Verify the redirect URL before we do any other processing.
 	c := e.d.Config()
-	returnTo, err := redir.SecureRedirectTo(r, c.SelfServiceBrowserDefaultReturnTo(ctx),
+	returnTo, err := redir.SecureRedirectTo(r,
+		c.SelfServiceBrowserDefaultReturnTo(ctx),
 		redir.SecureRedirectUseSourceURL(ctxUpdate.Flow.RequestURL),
 		redir.SecureRedirectAllowURLs(c.SelfServiceBrowserAllowedReturnToDomains(ctx)),
 		redir.SecureRedirectAllowSelfServiceURLs(c.SelfPublicURL(ctx)),
@@ -324,9 +325,16 @@ func (e *HookExecutor) PostSettingsHook(ctx context.Context, w http.ResponseWrit
 		// they can be returned to the client.
 		ctxUpdate.Flow.AddContinueWith(flow.NewContinueWithRedirectBrowserTo(returnTo.String()))
 		updatedFlow.ContinueWithItems = ctxUpdate.Flow.ContinueWithItems
+		e.d.Audit().WithRequest(r).WithField("identity_id", i.ID).WithField("ctx_flow", ctxUpdate.Flow).WithField("updated_flow", updatedFlow).Info("json: writing updated_flow")
 
 		e.d.Writer().Write(w, r, updatedFlow)
 		return nil
+	} else if x.IsBrowserRequest(r) {
+		e.d.Audit().WithRequest(r).WithField("identity_id", i.ID).WithField("ctx_flow", ctxUpdate.Flow).Info("browser: using continue_with_redirect")
+		if ctxUpdate.Flow.HasContinueWithRedirect() {
+			redir.ContentNegotiationRedirection(w, r, i.CopyWithoutCredentials(), e.d.Writer(), ctxUpdate.Flow.ContinueWithRedirect().RedirectUrl())
+			return nil
+		}
 	}
 
 	redir.ContentNegotiationRedirection(w, r, i.CopyWithoutCredentials(), e.d.Writer(), returnTo.String())

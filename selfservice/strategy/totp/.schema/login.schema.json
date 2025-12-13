@@ -17,6 +17,9 @@
       "type": "string",
       "minLength": 6
     },
+    "trust_device": {
+      "type": "boolean"
+    },
     "transient_payload": {
       "type": "object",
       "additionalProperties": true

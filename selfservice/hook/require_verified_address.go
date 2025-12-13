@@ -93,28 +93,28 @@ func (e *AddressVerifier) ExecuteLoginPostHook(w http.ResponseWriter, r *http.Re
 			continue
 		}
 
-		verificationFlow, err := verification.NewPostHookFlow(e.r.Config(),
+		verificationFlow, verr := verification.NewPostHookFlow(e.r.Config(),
 			e.r.Config().SelfServiceFlowVerificationRequestLifespan(ctx),
 			e.r.GenerateCSRFToken(r), r, strategy, f)
-		if err != nil {
-			return err
+		if verr != nil {
+			return verr
 		}
 
 		verificationFlow.State = flow.StateEmailSent
-		if err := strategy.PopulateVerificationMethod(r, verificationFlow); err != nil {
+		if err = strategy.PopulateVerificationMethod(r, verificationFlow); err != nil {
 			return err
 		}
 
 		verificationFlow.UI.Nodes.Append(
 			node.NewInputField(address.Via, address.Value, node.CodeGroup, node.InputAttributeTypeSubmit).
-				WithMetaLabel(text.NewInfoNodeResendOTP()),
+				WithMetaLabel(text.NewInfoNodeResendCodeVia(identity.AddressTypeEmail)),
 		)
 
-		if err := e.r.VerificationFlowPersister().CreateVerificationFlow(ctx, verificationFlow); err != nil {
+		if err = e.r.VerificationFlowPersister().CreateVerificationFlow(ctx, verificationFlow); err != nil {
 			return err
 		}
 
-		if err := strategy.SendVerificationCode(ctx, verificationFlow, i, address); err != nil {
+		if err = strategy.SendVerificationCode(ctx, verificationFlow, i, address); err != nil {
 			return err
 		}
 

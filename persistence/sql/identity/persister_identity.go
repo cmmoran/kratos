@@ -811,6 +811,14 @@ func (p *IdentityPersister) HydrateIdentityAssociations(ctx context.Context, i *
 				All(&i.VerifiableAddresses); err != nil {
 				return sqlcon.HandleError(err)
 			}
+
+			// Populate ActiveVerificationFlow for each verifiable address
+			for idx := range i.VerifiableAddresses {
+				if err := p.populateVerifiableAddressActiveFlow(ctx, &i.VerifiableAddresses[idx]); err != nil {
+					return err
+				}
+			}
+
 			return nil
 		})
 	}
@@ -1490,6 +1498,57 @@ func (p *IdentityPersister) UpdateVerifiableAddress(ctx context.Context, address
 	address.NID = p.NetworkID(ctx)
 	address.Value = stringToLowerTrim(address.Value)
 	return update.Generic(ctx, p.GetConnection(ctx), p.r.Tracer(ctx).Tracer(), address, updateColumns...)
+}
+
+// PopulateVerifiableAddressActiveFlow populates the ActiveVerificationFlow field for a verifiable address
+func (p *IdentityPersister) populateVerifiableAddressActiveFlow(ctx context.Context, address *identity.VerifiableAddress) (err error) {
+	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.PopulateVerifiableAddressActiveFlow",
+		trace.WithAttributes(
+			attribute.Stringer("address.id", address.ID),
+			attribute.Stringer("network.id", p.NetworkID(ctx))))
+	defer otelx.End(span, &err)
+
+	if address.Verified || address.Status == identity.VerifiableAddressStatusCompleted {
+		return nil
+	}
+
+	var flowID uuid.UUID
+	query := `
+		SELECT s.id as flow_id
+		FROM selfservice_verification_flows s,
+			 identity_verification_codes i,
+			 identity_verifiable_addresses a,
+     		 sessions ss
+		WHERE a.value = ?
+		  AND a.verified = false
+		  AND s.identity_id is not null
+		  AND ss.identity_id = s.identity_id
+		  AND s.session_id = ss.id
+		  AND NOW() < ss.expires_at
+		  AND ss.active = true
+		  AND i.id = (SELECT ii.id
+					  FROM identity_verification_codes ii
+					  WHERE ii.used_at IS NULL
+						AND ii.identity_verifiable_address_id = a.id
+					  	AND NOW() < ii.expires_at
+					  ORDER BY ii.created_at DESC
+					  LIMIT 1)
+		  AND s.id = i.selfservice_verification_flow_id
+		  AND a.id = i.identity_verifiable_address_id
+		  AND a.nid = ?
+		  AND NOW() < s.expires_at`
+
+	err = p.GetConnection(ctx).WithContext(ctx).RawQuery(query, address.Value, p.NetworkID(ctx)).First(&flowID)
+
+	if err == nil {
+		address.ActiveVerificationFlow = &flowID
+	} else if errors.Is(err, sql.ErrNoRows) {
+		// No active verification flow found, set to nil
+		address.ActiveVerificationFlow = nil
+		return nil
+	}
+
+	return sqlcon.HandleError(err)
 }
 
 func (p *IdentityPersister) validateIdentity(ctx context.Context, i *identity.Identity) (err error) {

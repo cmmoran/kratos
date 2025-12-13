@@ -40,6 +40,7 @@ import (
 	"github.com/ory/herodot"
 
 	"github.com/ory/kratos/identity"
+	"github.com/ory/kratos/request"
 	"github.com/ory/kratos/x"
 )
 
@@ -304,7 +305,7 @@ func (s *ManagerHTTP) DoesSessionSatisfy(ctx context.Context, sess *Session, req
 	ctx, span := s.r.Tracer(ctx).Tracer().Start(ctx, "sessions.ManagerHTTP.DoesSessionSatisfy")
 	defer otelx.End(span, &err)
 
-	sess.SetAuthenticatorAssuranceLevel()
+	sess.SetAuthenticatorAssuranceLevel(requestedAAL)
 
 	// If we already have AAL2 there is no need to check further because it is the highest AAL.
 	if sess.AuthenticatorAssuranceLevel == identity.AuthenticatorAssuranceLevel2 {
@@ -334,6 +335,8 @@ func (s *ManagerHTTP) DoesSessionSatisfy(ctx context.Context, sess *Session, req
 			return nil
 		}
 		return NewErrAALNotSatisfied(loginURL.String())
+	case config.DeviceTrustBasedAAL:
+		fallthrough
 	case config.HighestAvailableAAL:
 		if sess.AuthenticatorAssuranceLevel == identity.AuthenticatorAssuranceLevel2 {
 			// The session has AAL2, nothing to check.
@@ -348,6 +351,12 @@ func (s *ManagerHTTP) DoesSessionSatisfy(ctx context.Context, sess *Session, req
 			if err != nil {
 				return err
 			}
+		}
+
+		if requestedAAL == config.DeviceTrustBasedAAL {
+			currentDevice := CurrentDeviceForContext(ctx)
+			s.adjustSessionAAL(ctx, sess, currentDevice, sess.Identity)
+			sess.SetAuthenticatorAssuranceLevel(requestedAAL)
 		}
 
 		if aal, ok := sess.Identity.InternalAvailableAAL.ToAAL(); ok && aal == identity.AuthenticatorAssuranceLevel2 {
@@ -413,7 +422,7 @@ func (s *ManagerHTTP) SessionAddAuthenticationMethods(ctx context.Context, sid u
 	for _, m := range ams {
 		sess.CompletedLoginForMethod(m)
 	}
-	sess.SetAuthenticatorAssuranceLevel()
+	sess.SetAuthenticatorAssuranceLevel("")
 	return s.r.SessionPersister().UpsertSession(ctx, sess)
 }
 
@@ -478,12 +487,63 @@ func (s *ManagerHTTP) ActivateSession(r *http.Request, session *Session, i *iden
 	session.ExpiresAt = authenticatedAt.Add(s.r.Config().SessionLifespan(ctx))
 	session.AuthenticatedAt = authenticatedAt
 
-	session.SetSessionDeviceInformation(r.WithContext(ctx))
-	session.SetAuthenticatorAssuranceLevel()
+	currentDevice := session.SetSessionDeviceInformation(r.WithContext(ctx))
+	s.r.Audit().WithRequest(r).WithField("current_device", currentDevice).WithField("devices", session.Devices).Info("activatesession: current_device")
+	s.adjustSessionAAL(ctx, session, currentDevice, i)
+
+	session.SetAuthenticatorAssuranceLevel("")
 
 	span.SetAttributes(
 		attribute.String("identity.available_aal", session.Identity.InternalAvailableAAL.String),
 	)
 
 	return nil
+}
+
+func (s *ManagerHTTP) adjustSessionAAL(ctx context.Context, sess *Session, currentDevice *Device, i *identity.Identity) {
+	var err error
+	iaal := identity.AuthenticatorAssuranceLevel1
+	if iaalRaw, ok := i.InternalAvailableAAL.ToAAL(); ok {
+		iaal = iaalRaw
+	}
+	if currentDevice.Fingerprint != nil && (iaal > identity.AuthenticatorAssuranceLevel1) && len(currentDevice.AMR) == 0 { // Don't perform the list devices call if there's no fingerprint anyway
+		var trustedDevices []Device
+		if trustedDevices, err = s.r.SessionPersister().ListTrustedDevicesByIdentity(ctx, i.ID); err == nil && len(trustedDevices) > 0 {
+			l := s.r.Audit()
+			fields := []request.ContextHeader{"x-correlation-id", "x-session-entropy"}
+			for _, f := range fields {
+				fRaw := ctx.Value(f)
+				if fRaw != nil {
+					if fVal := fRaw.(string); fVal != "" {
+						l = l.WithField(string(f), fVal)
+					}
+				}
+			}
+			l.WithField("session_trusted_devices", sess.TrustedDevices).WithField("trusted_devices", trustedDevices).WithField("current_device", currentDevice).Info("comparing current_device to trusted_devices")
+			if currentDevice.DeviceTrustConfidence(trustedDevices) > 0.0 {
+				for _, td := range trustedDevices {
+					if td.AMR == nil {
+						continue
+					}
+					if *currentDevice.Fingerprint != *td.Fingerprint {
+						continue
+					}
+					for _, amr := range td.AMR {
+						if _, ok := i.GetCredentials(amr.Method); ok {
+							now := time.Now().UTC()
+							trustDeviceExpiration := amr.CompletedAt.UTC().Add(s.r.Config().SecurityTrustDeviceDuration(ctx))
+							if amr.AAL > sess.AuthenticatorAssuranceLevel && now.Before(trustDeviceExpiration) {
+								l.WithField("amr", amr).WithField("trusted_device", td).Trace("device trusted; adding aal2+ for this trusted device")
+								amr.DeviceTrustBased = true
+								sess.CompletedLoginForMethod(amr)
+								break
+							} else if now.After(trustDeviceExpiration) {
+								l.WithField("amr", amr).WithField("trusted_device", td).Trace("device trust is too old; not adding aal2+ for this trusted device")
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 }

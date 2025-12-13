@@ -6,6 +6,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -30,10 +31,11 @@ import (
 var _ session.Persister = new(Persister)
 
 const (
-	SessionDeviceUserAgentMaxLength = 512
-	SessionDeviceLocationMaxLength  = 512
-	paginationMaxItemsSize          = 1000
-	paginationDefaultItemsSize      = 250
+	SessionDeviceUserAgentMaxLength   = 512
+	SessionDeviceLocationMaxLength    = 512
+	SessionDeviceFingerprintMaxLength = 128
+	paginationMaxItemsSize            = 1000
+	paginationDefaultItemsSize        = 250
 )
 
 func (p *Persister) GetSession(ctx context.Context, sid uuid.UUID, expandables session.Expandables) (_ *session.Session, err error) {
@@ -42,6 +44,7 @@ func (p *Persister) GetSession(ctx context.Context, sid uuid.UUID, expandables s
 
 	var s session.Session
 	s.Devices = make([]session.Device, 0)
+	s.TrustedDevices = make([]session.Device, 0)
 	nid := p.NetworkID(ctx)
 
 	q := p.GetConnection(ctx).Q()
@@ -51,6 +54,10 @@ func (p *Persister) GetSession(ctx context.Context, sid uuid.UUID, expandables s
 	}
 
 	if err := q.Where("id = ? AND nid = ?", sid, nid).First(&s); err != nil {
+		return nil, sqlcon.HandleError(err)
+	}
+
+	if err = q.Where("session_id IN (select id from sessions where identity_id = ?) AND nid = ? AND trusted = true AND fingerprint IS NOT NULL", s.IdentityID, nid).All(&s.TrustedDevices); err != nil {
 		return nil, sqlcon.HandleError(err)
 	}
 
@@ -270,7 +277,28 @@ func (p *Persister) UpsertSession(ctx context.Context, s *session.Session) (err 
 		if exists {
 			// This must not be eager or identities will be created / updated
 			// Only update session and not corresponding session device records
-			if err := tx.Update(s, "issued_at", "identity_id", "nid"); err != nil {
+			if err = tx.Update(s, "issued_at", "identity_id", "nid"); err != nil {
+				return sqlcon.HandleError(err)
+			}
+			for i := range s.Devices {
+				device := &(s.Devices[i])
+				if device.TrustPending != nil {
+					device.Trusted = *device.TrustPending
+					device.TrustPending = nil
+					if device.AMR == nil {
+						device.AMR = make(session.AuthenticationMethods, 0)
+					}
+					p.r.Audit().WithField("device", device).Debug("updating trusted device")
+					// Only update session device's trusted state and authentication_methods
+					if err = p.DevicePersister.UpsertDevice(ctx, device); err != nil {
+						return sqlcon.HandleError(err)
+					}
+				}
+			}
+			if s.TrustedDevices == nil {
+				s.TrustedDevices = make([]session.Device, 0)
+			}
+			if err = tx.Where("session_id IN (select id from sessions where identity_id = ?) AND nid = ? AND trusted = true AND fingerprint IS NOT NULL", s.IdentityID, s.NID).All(&(*s).TrustedDevices); err != nil {
 				return sqlcon.HandleError(err)
 			}
 			updated = true
@@ -278,7 +306,7 @@ func (p *Persister) UpsertSession(ctx context.Context, s *session.Session) (err 
 		}
 
 		// This must not be eager or identities will be created / updated
-		if err := sqlcon.HandleError(tx.Create(s)); err != nil {
+		if err = sqlcon.HandleError(tx.Create(s)); err != nil {
 			return err
 		}
 
@@ -286,7 +314,9 @@ func (p *Persister) UpsertSession(ctx context.Context, s *session.Session) (err 
 			device := &(s.Devices[i])
 			device.SessionID = s.ID
 			device.NID = s.NID
-			device.IdentityID = pointerx.Ptr(s.IdentityID)
+			if len(device.AMR) == 0 {
+				device.AMR = make(session.AuthenticationMethods, 0)
+			}
 
 			if device.Location != nil {
 				device.Location = pointerx.Ptr(stringsx.TruncateByteLen(*device.Location, SessionDeviceLocationMaxLength))
@@ -294,8 +324,16 @@ func (p *Persister) UpsertSession(ctx context.Context, s *session.Session) (err 
 			if device.UserAgent != nil {
 				device.UserAgent = pointerx.Ptr(stringsx.TruncateByteLen(*device.UserAgent, SessionDeviceUserAgentMaxLength))
 			}
+			if device.Fingerprint != nil {
+				device.Fingerprint = pointerx.Ptr(stringsx.TruncateByteLen(*device.Fingerprint, SessionDeviceFingerprintMaxLength))
+			}
+			if device.TrustPending != nil {
+				device.Trusted = *device.TrustPending
+				device.TrustPending = nil
+			}
 
-			if err := p.CreateDevice(ctx, device); err != nil {
+			p.r.Audit().WithField("device", device).Debug("creating device")
+			if err = p.CreateDevice(ctx, device); err != nil {
 				return err
 			}
 		}
@@ -350,6 +388,7 @@ func (p *Persister) GetSessionByToken(ctx context.Context, token string, expand 
 
 	var s session.Session
 	s.Devices = make([]session.Device, 0)
+	s.TrustedDevices = make([]session.Device, 0)
 	nid := p.NetworkID(ctx)
 
 	con := p.GetConnection(ctx)
@@ -358,8 +397,8 @@ func (p *Persister) GetSessionByToken(ctx context.Context, token string, expand 
 	}
 
 	var (
-		i  *identity.Identity
-		sd []session.Device
+		i       *identity.Identity
+		sd, std []session.Device
 	)
 
 	eg, ctx := errgroup.WithContext(ctx)
@@ -367,6 +406,10 @@ func (p *Persister) GetSessionByToken(ctx context.Context, token string, expand 
 		eg.Go(func() error {
 			return sqlcon.HandleError(con.WithContext(ctx).
 				Where("session_id = ? AND nid = ?", s.ID, nid).All(&sd))
+		})
+		eg.Go(func() error {
+			return sqlcon.HandleError(con.WithContext(ctx).
+				Where("session_id IN (select id from sessions where identity_id = ?) AND nid = ? AND trusted = true AND fingerprint IS NOT NULL", s.IdentityID, nid).All(&std))
 		})
 	}
 
@@ -385,6 +428,7 @@ func (p *Persister) GetSessionByToken(ctx context.Context, token string, expand 
 
 	s.Identity = i
 	s.Devices = sd
+	s.TrustedDevices = std
 
 	return &s, nil
 }
@@ -509,4 +553,40 @@ func (p *Persister) DeleteExpiredSessions(ctx context.Context, expiresAt time.Ti
 	).Exec()
 
 	return sqlcon.HandleError(err)
+}
+
+func (p *Persister) ListTrustedDevicesByIdentity(ctx context.Context, iID uuid.UUID) (devices []session.Device, err error) {
+	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.ListTrustedDevicesByIdentity")
+	defer otelx.End(span, &err)
+	nid := p.NetworkID(ctx)
+
+	std := make([]session.Device, 0)
+	q := p.GetConnection(ctx).Q()
+	if err = q.Where("session_id IN (select id from sessions where identity_id = ?) AND nid = ? AND trusted = true AND fingerprint IS NOT NULL", iID, nid).All(&std); err != nil {
+		return nil, sqlcon.HandleError(err)
+	}
+
+	return std, nil
+}
+
+func (p *Persister) ListTrustedDevicesByIdentityWithExpiration(ctx context.Context, iID uuid.UUID, deviceTrustDuration time.Duration) (devices []session.Device, err error) {
+	devices, err = p.ListTrustedDevicesByIdentity(ctx, iID)
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+	_ = slices.DeleteFunc(devices, func(device session.Device) bool {
+		if device.Trusted && len(device.AMR) > 0 {
+			for _, amr := range device.AMR {
+				if now.After(amr.CompletedAt.Add(deviceTrustDuration)) {
+					return true
+				}
+			}
+			return false
+		}
+		return true
+	})
+
+	return devices, nil
 }

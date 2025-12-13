@@ -43,3 +43,13 @@ const (
 	PasskeyLoginTrigger     = "passkey_login_trigger" //#nosec G101 -- Not a credential
 	PasskeyRemove           = "passkey_remove"
 )
+
+const (
+	CodeEnable  = "code_enable"
+	CodeDisable = "code_disable"
+)
+
+const (
+	TOTPDeviceUntrust = "totp_device_untrust"
+	CodeDeviceUntrust = "code_device_untrust"
+)

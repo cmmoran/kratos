@@ -11,6 +11,9 @@ export BUILD_DATE         := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 export VCS_REF            := $(shell git rev-parse HEAD)
 export QUICKSTART_OPTIONS ?=
 export IMAGE_TAG 					:= $(if $(IMAGE_TAG),$(IMAGE_TAG),latest)
+export DOCKER_REPO 				?= "oryd"
+export DOCKER_PROJECT 		?= "kratos"
+export DOCKER_FULL 				?= "$(DOCKER_REPO)/$(DOCKER_PROJECT)"
 
 .bin/clidoc:
 	echo "deprecated usage, use docs/cli instead"
@@ -142,13 +145,13 @@ sdk: .bin/ory node_modules
 
 .PHONY: quickstart
 quickstart:
-	docker pull oryd/kratos:latest
-	docker pull oryd/kratos-selfservice-ui-node:latest
+	docker pull $(DOCKER_FULL):$(IMAGE_TAG)
+	docker pull $(DOCKER_REPO)/kratos-selfservice-ui-node:latest
 	docker-compose -f quickstart.yml -f quickstart-standalone.yml up --build --force-recreate
 
 .PHONY: quickstart-dev
 quickstart-dev:
-	docker build -f .docker/Dockerfile-build -t oryd/kratos:latest .
+	docker build -f .docker/Dockerfile-build -t $(DOCKER_FULL):$(IMAGE_TAG) .
 	docker-compose -f quickstart.yml -f quickstart-standalone.yml -f quickstart-latest.yml $(QUICKSTART_OPTIONS) up --build --force-recreate
 
 authors:  # updates the AUTHORS file
@@ -166,7 +169,7 @@ format: .bin/ory node_modules .bin/buf
 # Build local docker image
 .PHONY: docker
 docker:
-	DOCKER_BUILDKIT=1 DOCKER_CONTENT_TRUST=1 docker build -f .docker/Dockerfile-build --build-arg=COMMIT=$(VCS_REF) --build-arg=BUILD_DATE=$(BUILD_DATE) -t oryd/kratos:${IMAGE_TAG} .
+	DOCKER_BUILDKIT=1 DOCKER_CONTENT_TRUST=1 docker build -f .docker/Dockerfile-build --build-arg=COMMIT=$(VCS_REF) --build-arg=BUILD_DATE=$(BUILD_DATE) --push -t ${DOCKER_FULL}:${IMAGE_TAG} .
 
 .PHONY: test-e2e
 test-e2e: node_modules test-resetdb kratos-config-e2e
@@ -188,9 +191,9 @@ test-refresh:
 
 .PHONY: pre-release
 pre-release:
-	go tool yq '.services.kratos.image = "oryd/kratos:'$$DOCKER_TAG'"' -i quickstart.yml
-	go tool yq '.services.kratos-migrate.image = "oryd/kratos:'$$DOCKER_TAG'"' -i quickstart.yml
-	go tool yq '.services.kratos-selfservice-ui-node.image = "oryd/kratos-selfservice-ui-node:'$$DOCKER_TAG'"' -i quickstart.yml
+	go tool yq '.services.kratos.image = "'$$DOCKER_FULL':'$$IMAGE_TAG'"' -i quickstart.yml
+	go tool yq '.services.kratos-migrate.image = "'$$DOCKER_FULL':'$$IMAGE_TAG'"' -i quickstart.yml
+	go tool yq '.services.kratos-selfservice-ui-node.image = "'$$DOCKER_REPO':kratos-selfservice-ui-node.-'$$IMAGE_TAG'"' -i quickstart.yml
 
 .PHONY: post-release
 post-release:

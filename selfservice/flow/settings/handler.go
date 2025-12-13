@@ -594,12 +594,12 @@ func (h *Handler) updateSettingsFlow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	requestURL := x.RequestURL(r).String()
-	if err := h.d.SessionManager().DoesSessionSatisfy(ctx, ss, h.d.Config().SelfServiceSettingsRequiredAAL(ctx), session.WithRequestURL(requestURL)); err != nil {
+	if err = h.d.SessionManager().DoesSessionSatisfy(ctx, ss, h.d.Config().SelfServiceSettingsRequiredAAL(ctx), session.WithRequestURL(requestURL)); err != nil {
 		h.d.SettingsFlowErrorHandler().WriteFlowError(ctx, w, r, node.DefaultGroup, f, nil, nil, err)
 		return
 	}
 
-	if err := f.Valid(ss); err != nil {
+	if err = f.Valid(ss); err != nil {
 		h.d.SettingsFlowErrorHandler().WriteFlowError(ctx, w, r, node.DefaultGroup, f, ss.Identity, ss, err)
 		return
 	}
@@ -611,6 +611,7 @@ func (h *Handler) updateSettingsFlow(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, flow.ErrStrategyNotResponsible) {
 			continue
 		} else if errors.Is(err, flow.ErrCompletedByStrategy) {
+			h.d.Audit().WithRequest(r).WithField("flow", f).Info("flow completed by strategy")
 			return
 		} else if err != nil {
 			h.d.SettingsFlowErrorHandler().WriteFlowError(ctx, w, r, strat.NodeGroup(), f, ss.Identity, ss, err)

@@ -18,6 +18,7 @@ import (
 
 	"github.com/ory/analytics-go/v5"
 	"github.com/ory/graceful"
+
 	"github.com/ory/kratos/cmd/courier"
 	"github.com/ory/kratos/driver"
 	"github.com/ory/kratos/driver/config"
@@ -52,6 +53,22 @@ func init() {
 func servePublic(ctx context.Context, r *driver.RegistryDefault, cmd *cobra.Command) (func() error, error) {
 	cfg := r.Config().ServePublic(ctx)
 	l := r.Logger()
+
+	key := "no-public"
+	skipServe, err := cmd.Flags().GetBool(key)
+	if err != nil {
+		l.Printf("Unable to get command line flag \"%s\"", key)
+		return func() error {
+			return err
+		}, nil
+	}
+	if skipServe {
+		return func() error {
+			l.Printf("Serve httpd is disabled via --%s", key)
+			return nil
+		}, nil
+	}
+
 	n := negroni.New()
 
 	for _, mw := range r.HTTPMiddlewares() {
@@ -67,7 +84,15 @@ func servePublic(ctx context.Context, r *driver.RegistryDefault, cmd *cobra.Comm
 	n.UseFunc(semconv.Middleware)
 	n.Use(publicLogger)
 	n.Use(x.HTTPLoaderContextMiddleware(r))
-	n.Use(sqa(ctx, cmd, r))
+	sqaSvc := sqa(ctx, cmd, r)
+	n.Use(sqaSvc)
+	n.UseFunc(func(w http.ResponseWriter, req *http.Request, next http.HandlerFunc) {
+		if dev := session.CurrentDeviceForRequest(req); dev != nil && dev.Fingerprint != nil {
+			l.WithRequest(req).WithField("device", dev.Fingerprint).Trace("admin: set device to context")
+		}
+
+		next(w, req)
+	})
 
 	router := x.NewRouterPublic(r)
 	csrf := nosurfx.NewCSRFHandler(otelx.SpanNameRecorderMiddleware(router), r)
@@ -105,6 +130,7 @@ func servePublic(ctx context.Context, r *driver.RegistryDefault, cmd *cobra.Comm
 
 	certFunc, err := cfg.TLS.GetCertFunc(ctx, l, "public")
 	if err != nil {
+		_ = sqaSvc.Close()
 		return nil, err
 	}
 
@@ -120,6 +146,9 @@ func servePublic(ctx context.Context, r *driver.RegistryDefault, cmd *cobra.Comm
 	addr := cfg.GetAddress()
 
 	return func() error {
+		defer func() {
+			_ = sqaSvc.Close()
+		}()
 		l.Printf("Starting the public httpd on: %s", addr)
 		if err := graceful.GracefulContext(ctx, func() error {
 			listener, err := networkx.MakeListener(addr, &cfg.Socket)
@@ -145,6 +174,22 @@ func servePublic(ctx context.Context, r *driver.RegistryDefault, cmd *cobra.Comm
 func serveAdmin(ctx context.Context, r *driver.RegistryDefault, cmd *cobra.Command) (func() error, error) {
 	cfg := r.Config().ServeAdmin(ctx)
 	l := r.Logger()
+
+	key := "no-admin"
+	skipServe, err := cmd.Flags().GetBool(key)
+	if err != nil {
+		l.Printf("Unable to get command line flag \"%s\"", key)
+		return func() error {
+			return err
+		}, nil
+	}
+	if skipServe {
+		return func() error {
+			l.Printf("Serve httpd is disabled via --%s", key)
+			return nil
+		}, nil
+	}
+
 	n := negroni.New()
 
 	for _, mw := range r.HTTPMiddlewares() {
@@ -160,7 +205,16 @@ func serveAdmin(ctx context.Context, r *driver.RegistryDefault, cmd *cobra.Comma
 	n.Use(adminLogger)
 	n.UseFunc(x.RedirectAdminMiddleware)
 	n.Use(x.HTTPLoaderContextMiddleware(r))
-	n.Use(sqa(ctx, cmd, r))
+	sqaSvc := sqa(ctx, cmd, r)
+	n.Use(sqaSvc)
+	n.UseFunc(func(w http.ResponseWriter, req *http.Request, next http.HandlerFunc) {
+		if dev := session.CurrentDeviceForRequest(req); dev != nil && dev.Fingerprint != nil {
+			l.WithRequest(req).WithField("device", dev.Fingerprint).Trace("admin: set device to context")
+		}
+
+		next(w, req)
+	})
+	n.Use(r.PrometheusManager())
 
 	router := x.NewRouterAdmin(r)
 	r.RegisterAdminRoutes(ctx, router)
@@ -180,6 +234,7 @@ func serveAdmin(ctx context.Context, r *driver.RegistryDefault, cmd *cobra.Comma
 
 	certFunc, err := cfg.TLS.GetCertFunc(ctx, l, "admin")
 	if err != nil {
+		_ = sqaSvc.Close()
 		return nil, err
 	}
 
@@ -196,11 +251,14 @@ func serveAdmin(ctx context.Context, r *driver.RegistryDefault, cmd *cobra.Comma
 	addr := cfg.GetAddress()
 
 	return func() error {
+		defer func() {
+			_ = sqaSvc.Close()
+		}()
 		l.Printf("Starting the admin httpd on: %s", addr)
-		if err := graceful.GracefulContext(ctx, func() error {
-			listener, err := networkx.MakeListener(addr, &cfg.Socket)
-			if err != nil {
-				return err
+		if err = graceful.GracefulContext(ctx, func() error {
+			listener, lerr := networkx.MakeListener(addr, &cfg.Socket)
+			if lerr != nil {
+				return lerr
 			}
 
 			if certFunc == nil {
@@ -234,7 +292,6 @@ func sqa(ctx context.Context, cmd *cobra.Command, d driver.Registry) *metricsx.S
 		urls = append(urls, c.AllowedOrigins...)
 	}
 	host := urlx.ExtractPublicAddress(urls...)
-
 	// Creates only ones
 	// instance
 	return metricsx.New(

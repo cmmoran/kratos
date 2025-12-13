@@ -20,6 +20,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ory/herodot"
+
 	"github.com/ory/kratos/continuity"
 	oidcv1 "github.com/ory/kratos/gen/oidc/v1"
 	"github.com/ory/kratos/identity"
@@ -68,11 +69,11 @@ func (s *Strategy) PopulateRegistrationMethod(r *http.Request, f *registration.F
 	return s.populateMethod(r, f, text.NewInfoRegistrationWith)
 }
 
-func (s *Strategy) PopulateRegistrationMethodProfile(r *http.Request, f *registration.Flow, options ...registration.FormHydratorModifier) error {
+func (s *Strategy) PopulateRegistrationMethodProfile(r *http.Request, f *registration.Flow, _ ...registration.FormHydratorModifier) error {
 	return s.populateMethod(r, f, text.NewInfoRegistrationWith)
 }
 
-func (s *Strategy) PopulateRegistrationMethodCredentials(r *http.Request, f *registration.Flow, options ...registration.FormHydratorModifier) error {
+func (s *Strategy) PopulateRegistrationMethodCredentials(r *http.Request, f *registration.Flow, _ ...registration.FormHydratorModifier) error {
 	return s.populateMethod(r, f, text.NewInfoRegistrationWith)
 }
 
@@ -469,7 +470,7 @@ func (s *Strategy) setMetadata(evaluated string, i *identity.Identity, m Metadat
 	switch m {
 	case PublicMetadata:
 		i.MetadataPublic = []byte(metadata.Raw)
-	case AdminMetadata:
+	default:
 		i.MetadataAdmin = []byte(metadata.Raw)
 	}
 

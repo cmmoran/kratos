@@ -12,14 +12,17 @@ import (
 	"net/url"
 	"reflect"
 	"strings"
+	"text/template"
 	"time"
 
+	"github.com/Masterminds/sprig/v3"
 	"github.com/dgraph-io/ristretto/v2"
 	"github.com/google/go-jsonnet"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
 
 	"github.com/ory/herodot"
+
 	"github.com/ory/kratos/x"
 	"github.com/ory/x/fetcher"
 	"github.com/ory/x/jsonnetsecure"
@@ -205,7 +208,7 @@ func (b *Builder) addURLEncodedBody(ctx context.Context, jsonnetSnippet []byte, 
 	}
 
 	values := map[string]string{}
-	if err := json.Unmarshal([]byte(res), &values); err != nil {
+	if err = json.Unmarshal([]byte(res), &values); err != nil {
 		return errors.WithStack(err)
 	}
 
@@ -223,6 +226,8 @@ func (b *Builder) addURLEncodedBody(ctx context.Context, jsonnetSnippet []byte, 
 	return nil
 }
 
+type ContextHeader string
+
 func (b *Builder) BuildRequest(ctx context.Context, body interface{}) (*retryablehttp.Request, error) {
 	b.r.Header = b.Config.header
 	b.Config.auth.apply(b.r)
@@ -230,6 +235,15 @@ func (b *Builder) BuildRequest(ctx context.Context, body interface{}) (*retryabl
 	// According to the HTTP spec any request method, but TRACE is allowed to
 	// have a body. Even this is a bad practice for some of them, like for GET
 	if b.Config.Method != http.MethodTrace {
+		fields := []ContextHeader{"x-correlation-id", "x-session-entropy"}
+		for _, f := range fields {
+			fRaw := ctx.Value(f)
+			if fRaw != nil {
+				if fVal := fRaw.(string); fVal != "" {
+					b.r.Header.Set(string(f), fVal)
+				}
+			}
+		}
 		if err := b.addBody(ctx, body); err != nil {
 			return nil, err
 		}
@@ -277,6 +291,27 @@ func (b *Builder) BuildRawRequest(body any) (*retryablehttp.Request, error) {
 	}
 
 	return b.r, nil
+}
+
+func (b *Builder) RenderHeadersWithTemplates(headers http.Header) {
+	for k := range b.r.Header {
+		v := b.r.Header.Get(k)
+		if len(v) == 0 {
+			continue
+		}
+		if strings.Contains(v, "{{") && strings.Contains(v, "}}") {
+			tpl, err := template.New("").Funcs(sprig.TxtFuncMap()).Parse(v)
+			if err != nil {
+				continue
+			}
+			var buf bytes.Buffer
+			if err = tpl.Execute(&buf, headers); err != nil {
+				continue
+			} else {
+				b.r.Header.Set(k, buf.String())
+			}
+		}
+	}
 }
 
 func (b *Builder) readTemplate(ctx context.Context) ([]byte, error) {
