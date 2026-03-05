@@ -126,6 +126,7 @@ const (
 	ViperKeySelfServiceLoginFlowStyle                        = "selfservice.flows.login.style"
 	ViperKeySecurityAccountEnumerationMitigate               = "security.account_enumeration.mitigate"
 	ViperKeySecurityDisallowRefInIdentitySchemas             = "security.disallow_ref_in_identity_schemas"
+	ViperKeySecurityTrustDeviceDuration                      = "security.trust_device.duration"
 	ViperKeySelfServiceLoginRequestLifespan                  = "selfservice.flows.login.lifespan"
 	ViperKeySelfServiceLoginAfter                            = "selfservice.flows.login.after"
 	ViperKeySelfServiceLoginBeforeHooks                      = "selfservice.flows.login.before.hooks"
@@ -171,6 +172,7 @@ const (
 	ViperKeyLinkLifespan                                     = "selfservice.methods.link.config.lifespan"
 	ViperKeyCodeLifespan                                     = "selfservice.methods.code.config.lifespan"
 	ViperKeyCodeMaxSubmissions                               = "selfservice.methods.code.config.max_submissions"
+	ViperKeyCodeMfaLifespan                                  = "selfservice.methods.code.config.mfa_lifespan"
 	ViperKeyCodeConfigMissingCredentialFallbackEnabled       = "selfservice.methods.code.config.missing_credential_fallback_enabled"
 	ViperKeyPasswordHaveIBeenPwnedHost                       = "selfservice.methods.password.config.haveibeenpwned_host"
 	ViperKeyPasswordHaveIBeenPwnedEnabled                    = "selfservice.methods.password.config.haveibeenpwned_enabled"
@@ -206,6 +208,7 @@ const (
 
 const (
 	HighestAvailableAAL                 = "highest_available"
+	DeviceTrustBasedAAL                 = "device_trust_based"
 	Argon2DefaultMemory                 = 128 * bytesize.MB
 	Argon2DefaultIterations      uint32 = 1
 	Argon2DefaultSaltLength      uint32 = 16
@@ -1651,4 +1654,12 @@ func (p *Config) SecurityAccountEnumerationMitigate(ctx context.Context) bool {
 
 func (p *Config) SecurityDisallowRefInIdentitySchemas(ctx context.Context) bool {
 	return p.GetProvider(ctx).Bool(ViperKeySecurityDisallowRefInIdentitySchemas)
+}
+
+func (p *Config) SecurityTrustDeviceDuration(ctx context.Context) time.Duration {
+	return p.GetProvider(ctx).DurationF(ViperKeySecurityTrustDeviceDuration, time.Hour*24*30)
+}
+
+func (p *Config) SelfServiceCodeMethodMfaLifespan(ctx context.Context) time.Duration {
+	return p.GetProvider(ctx).DurationF(ViperKeyCodeMfaLifespan, time.Minute*10)
 }

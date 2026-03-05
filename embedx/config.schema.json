@@ -70,6 +70,19 @@
       "properties": {
         "hook": {
           "const": "require_verified_address"
+        },
+        "config": {
+          "type": "object",
+          "properties": {
+            "require_all_verified": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "additionalProperties": false,
+          "default": {
+            "require_all_verified": false
+          }
         }
       },
       "additionalProperties": false,
@@ -941,9 +954,13 @@
     },
     "featureRequiredAal": {
       "title": "Required Authenticator Assurance Level",
-      "description": "Sets what Authenticator Assurance Level (used for 2FA) is required to access this feature. If set to `highest_available` then this endpoint requires the highest AAL the identity has set up. If set to `aal1` then the identity can access this feature without 2FA.",
+      "description": "Sets what Authenticator Assurance Level (used for 2FA) is required to access this feature. If set to `highest_available` then this endpoint requires the highest AAL the identity has set up. If set to `aal1` then the identity can access this feature without 2FA. If set to `device_trust_based` then this endpoint will respect the device trust for a user and will apply the most recent trusted device's AAL for the user. Note that `device_trust_based` only works for the `session` required_aal setting, not the `settings` required_aal setting.",
       "type": "string",
-      "enum": ["aal1", "highest_available"],
+      "enum": [
+        "aal1",
+        "highest_available",
+        "device_trust_based"
+      ],
       "default": "highest_available"
     },
     "selfServiceAfterSettings": {
@@ -1685,6 +1702,17 @@
                       "minimum": 1,
                       "maximum": 255,
                       "default": 5
+                    },
+                    "mfa_lifespan": {
+                      "title": "How long a code (mfa) is valid for",
+                      "type": "string",
+                      "pattern": "^([0-9]+(ns|us|ms|s|m|h))+$",
+                      "default": "10m",
+                      "examples": [
+                        "1h",
+                        "1m",
+                        "1s"
+                      ]
                     },
                     "missing_credential_fallback_enabled": {
                       "type": "boolean",
@@ -3005,6 +3033,18 @@
           "description": "If true, `$ref` URLs inside identity schemas may not resolve to `file://`, `http://`, or `https://` sources. This blocks server-side file reads (`file://`) and server-side request forgery (`http(s)://`) via malicious identity schemas. Internal JSON-pointer refs (`#/definitions/...`) and self-contained `base64://` refs remain allowed. Leave at the default (false) to preserve existing behavior for operators who intentionally reference external schemas. Ory Network forces this to true.",
           "type": "boolean",
           "default": false
+        },
+        "trust_device": {
+          "type": "object",
+          "properties": {
+            "duration": {
+              "description": "Defines how long a device with be trusted once it has been marked as a 'trust this device' during an aal2+ authentication.",
+              "type": "string",
+              "pattern": "^([0-9]+(ns|us|ms|s|m|h))+$",
+              "default": "720h",
+              "examples": ["1h", "1m", "1s"]
+            }
+          }
         }
       }
     },
@@ -3117,7 +3157,9 @@
                 "Sec-Fetch-Site",
                 "Sec-Fetch-User",
                 "True-Client-Ip",
-                "User-Agent"
+                "User-Agent",
+                "X-Correlation-Id",
+                "X-Session-Entropy"
               ]
             }
           }

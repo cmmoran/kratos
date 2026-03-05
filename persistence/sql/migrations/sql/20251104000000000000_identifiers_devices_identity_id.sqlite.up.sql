@@ -36,6 +36,9 @@ CREATE TABLE IF NOT EXISTS "_session_devices_tmp"
   "ip_address" VARCHAR(50)  DEFAULT '',
   "user_agent" VARCHAR(512) DEFAULT '',
   "location"   VARCHAR(512) DEFAULT '',
+  "trusted" bool NOT NULL DEFAULT false,
+  "fingerprint" VARCHAR(128),
+  "authentication_methods" TEXT,
   "nid"        UUID             NOT NULL,
   "session_id" UUID             NOT NULL,
   "created_at" timestamp        NOT NULL,
@@ -43,11 +46,11 @@ CREATE TABLE IF NOT EXISTS "_session_devices_tmp"
   CONSTRAINT "session_metadata_sessions_id_fk" FOREIGN KEY ("session_id") REFERENCES "sessions" ("id") ON DELETE cascade,
   CONSTRAINT "session_metadata_nid_fk" FOREIGN KEY ("nid") REFERENCES "networks" ("id") ON DELETE cascade,
   CONSTRAINT "session_devices_identity_id_fk" FOREIGN KEY ("identity_id") REFERENCES "identities" ("id") ON DELETE cascade,
-  CONSTRAINT unique_session_device UNIQUE (nid, session_id, ip_address, user_agent)
+  CONSTRAINT unique_session_device UNIQUE (nid, session_id, ip_address, user_agent, fingerprint, location)
 );
 
-INSERT INTO "_session_devices_tmp" (id, identity_id, ip_address, user_agent, location, nid, session_id, created_at, updated_at)
-    SELECT sd.id, s.identity_id, sd.ip_address, sd.user_agent, sd.location, sd.nid, sd.session_id, sd.created_at, sd.updated_at
+INSERT INTO "_session_devices_tmp" (id, identity_id, ip_address, user_agent, location, trusted, fingerprint, authentication_methods, nid, session_id, created_at, updated_at)
+    SELECT sd.id, s.identity_id, sd.ip_address, sd.user_agent, sd.location, sd.trusted, sd.fingerprint, sd.authentication_methods, sd.nid, sd.session_id, sd.created_at, sd.updated_at
     FROM session_devices sd JOIN sessions s ON sd.session_id = s.id;
 
 DROP TABLE session_devices;
