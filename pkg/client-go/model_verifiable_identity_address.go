@@ -22,6 +22,8 @@ var _ MappedNullable = &VerifiableIdentityAddress{}
 
 // VerifiableIdentityAddress VerifiableAddress is an identity's verifiable address
 type VerifiableIdentityAddress struct {
+	// ActiveVerificationFlow represents the active verification flow for this address This is a resolved field based on the verification codes and flows
+	ActiveVerificationFlow *string `json:"active_verification_flow,omitempty"`
 	// When this entry was created
 	CreatedAt *time.Time `json:"created_at,omitempty"`
 	// The ID
@@ -61,6 +63,38 @@ func NewVerifiableIdentityAddress(status string, value string, verified bool, vi
 func NewVerifiableIdentityAddressWithDefaults() *VerifiableIdentityAddress {
 	this := VerifiableIdentityAddress{}
 	return &this
+}
+
+// GetActiveVerificationFlow returns the ActiveVerificationFlow field value if set, zero value otherwise.
+func (o *VerifiableIdentityAddress) GetActiveVerificationFlow() string {
+	if o == nil || IsNil(o.ActiveVerificationFlow) {
+		var ret string
+		return ret
+	}
+	return *o.ActiveVerificationFlow
+}
+
+// GetActiveVerificationFlowOk returns a tuple with the ActiveVerificationFlow field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *VerifiableIdentityAddress) GetActiveVerificationFlowOk() (*string, bool) {
+	if o == nil || IsNil(o.ActiveVerificationFlow) {
+		return nil, false
+	}
+	return o.ActiveVerificationFlow, true
+}
+
+// HasActiveVerificationFlow returns a boolean if a field has been set.
+func (o *VerifiableIdentityAddress) HasActiveVerificationFlow() bool {
+	if o != nil && !IsNil(o.ActiveVerificationFlow) {
+		return true
+	}
+
+	return false
+}
+
+// SetActiveVerificationFlow gets a reference to the given string and assigns it to the ActiveVerificationFlow field.
+func (o *VerifiableIdentityAddress) SetActiveVerificationFlow(v string) {
+	o.ActiveVerificationFlow = &v
 }
 
 // GetCreatedAt returns the CreatedAt field value if set, zero value otherwise.
@@ -297,6 +331,9 @@ func (o VerifiableIdentityAddress) MarshalJSON() ([]byte, error) {
 
 func (o VerifiableIdentityAddress) ToMap() (map[string]interface{}, error) {
 	toSerialize := map[string]interface{}{}
+	if !IsNil(o.ActiveVerificationFlow) {
+		toSerialize["active_verification_flow"] = o.ActiveVerificationFlow
+	}
 	if !IsNil(o.CreatedAt) {
 		toSerialize["created_at"] = o.CreatedAt
 	}
@@ -359,6 +396,7 @@ func (o *VerifiableIdentityAddress) UnmarshalJSON(data []byte) (err error) {
 	additionalProperties := make(map[string]interface{})
 
 	if err = json.Unmarshal(data, &additionalProperties); err == nil {
+		delete(additionalProperties, "active_verification_flow")
 		delete(additionalProperties, "created_at")
 		delete(additionalProperties, "id")
 		delete(additionalProperties, "status")

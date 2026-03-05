@@ -28,7 +28,9 @@ type UpdateLoginFlowWithTotpMethod struct {
 	// The TOTP code.
 	TotpCode string `json:"totp_code"`
 	// Transient data to pass along to any webhooks
-	TransientPayload     map[string]interface{} `json:"transient_payload,omitempty"`
+	TransientPayload map[string]interface{} `json:"transient_payload,omitempty"`
+	// Trust this device
+	TrustDevice          *bool `json:"trust_device,omitempty"`
 	AdditionalProperties map[string]interface{}
 }
 
@@ -165,6 +167,38 @@ func (o *UpdateLoginFlowWithTotpMethod) SetTransientPayload(v map[string]interfa
 	o.TransientPayload = v
 }
 
+// GetTrustDevice returns the TrustDevice field value if set, zero value otherwise.
+func (o *UpdateLoginFlowWithTotpMethod) GetTrustDevice() bool {
+	if o == nil || IsNil(o.TrustDevice) {
+		var ret bool
+		return ret
+	}
+	return *o.TrustDevice
+}
+
+// GetTrustDeviceOk returns a tuple with the TrustDevice field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *UpdateLoginFlowWithTotpMethod) GetTrustDeviceOk() (*bool, bool) {
+	if o == nil || IsNil(o.TrustDevice) {
+		return nil, false
+	}
+	return o.TrustDevice, true
+}
+
+// HasTrustDevice returns a boolean if a field has been set.
+func (o *UpdateLoginFlowWithTotpMethod) HasTrustDevice() bool {
+	if o != nil && !IsNil(o.TrustDevice) {
+		return true
+	}
+
+	return false
+}
+
+// SetTrustDevice gets a reference to the given bool and assigns it to the TrustDevice field.
+func (o *UpdateLoginFlowWithTotpMethod) SetTrustDevice(v bool) {
+	o.TrustDevice = &v
+}
+
 func (o UpdateLoginFlowWithTotpMethod) MarshalJSON() ([]byte, error) {
 	toSerialize, err := o.ToMap()
 	if err != nil {
@@ -182,6 +216,9 @@ func (o UpdateLoginFlowWithTotpMethod) ToMap() (map[string]interface{}, error) {
 	toSerialize["totp_code"] = o.TotpCode
 	if !IsNil(o.TransientPayload) {
 		toSerialize["transient_payload"] = o.TransientPayload
+	}
+	if !IsNil(o.TrustDevice) {
+		toSerialize["trust_device"] = o.TrustDevice
 	}
 
 	for key, value := range o.AdditionalProperties {
@@ -231,6 +268,7 @@ func (o *UpdateLoginFlowWithTotpMethod) UnmarshalJSON(data []byte) (err error) {
 		delete(additionalProperties, "method")
 		delete(additionalProperties, "totp_code")
 		delete(additionalProperties, "transient_payload")
+		delete(additionalProperties, "trust_device")
 		o.AdditionalProperties = additionalProperties
 	}
 

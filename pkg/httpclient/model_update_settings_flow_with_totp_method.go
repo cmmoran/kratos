@@ -27,6 +27,8 @@ type UpdateSettingsFlowWithTotpMethod struct {
 	Method string `json:"method"`
 	// ValidationTOTP must contain a valid TOTP based on the
 	TotpCode *string `json:"totp_code,omitempty"`
+	// DeviceUntrust if true, will untrust this device id for this aal2 method for this account
+	TotpDeviceUntrust *string `json:"totp_device_untrust,omitempty"`
 	// UnlinkTOTP if true will remove the TOTP pairing, effectively removing the credential. This can be used to set up a new TOTP device.
 	TotpUnlink *bool `json:"totp_unlink,omitempty"`
 	// Transient data to pass along to any webhooks
@@ -142,6 +144,38 @@ func (o *UpdateSettingsFlowWithTotpMethod) SetTotpCode(v string) {
 	o.TotpCode = &v
 }
 
+// GetTotpDeviceUntrust returns the TotpDeviceUntrust field value if set, zero value otherwise.
+func (o *UpdateSettingsFlowWithTotpMethod) GetTotpDeviceUntrust() string {
+	if o == nil || IsNil(o.TotpDeviceUntrust) {
+		var ret string
+		return ret
+	}
+	return *o.TotpDeviceUntrust
+}
+
+// GetTotpDeviceUntrustOk returns a tuple with the TotpDeviceUntrust field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *UpdateSettingsFlowWithTotpMethod) GetTotpDeviceUntrustOk() (*string, bool) {
+	if o == nil || IsNil(o.TotpDeviceUntrust) {
+		return nil, false
+	}
+	return o.TotpDeviceUntrust, true
+}
+
+// HasTotpDeviceUntrust returns a boolean if a field has been set.
+func (o *UpdateSettingsFlowWithTotpMethod) HasTotpDeviceUntrust() bool {
+	if o != nil && !IsNil(o.TotpDeviceUntrust) {
+		return true
+	}
+
+	return false
+}
+
+// SetTotpDeviceUntrust gets a reference to the given string and assigns it to the TotpDeviceUntrust field.
+func (o *UpdateSettingsFlowWithTotpMethod) SetTotpDeviceUntrust(v string) {
+	o.TotpDeviceUntrust = &v
+}
+
 // GetTotpUnlink returns the TotpUnlink field value if set, zero value otherwise.
 func (o *UpdateSettingsFlowWithTotpMethod) GetTotpUnlink() bool {
 	if o == nil || IsNil(o.TotpUnlink) {
@@ -223,6 +257,9 @@ func (o UpdateSettingsFlowWithTotpMethod) ToMap() (map[string]interface{}, error
 	if !IsNil(o.TotpCode) {
 		toSerialize["totp_code"] = o.TotpCode
 	}
+	if !IsNil(o.TotpDeviceUntrust) {
+		toSerialize["totp_device_untrust"] = o.TotpDeviceUntrust
+	}
 	if !IsNil(o.TotpUnlink) {
 		toSerialize["totp_unlink"] = o.TotpUnlink
 	}
@@ -275,6 +312,7 @@ func (o *UpdateSettingsFlowWithTotpMethod) UnmarshalJSON(data []byte) (err error
 		delete(additionalProperties, "csrf_token")
 		delete(additionalProperties, "method")
 		delete(additionalProperties, "totp_code")
+		delete(additionalProperties, "totp_device_untrust")
 		delete(additionalProperties, "totp_unlink")
 		delete(additionalProperties, "transient_payload")
 		o.AdditionalProperties = additionalProperties
