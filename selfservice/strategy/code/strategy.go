@@ -170,9 +170,11 @@ func (s *Strategy) CountActiveMultiFactorCredentials(ctx context.Context, cc map
 
 	// Count valid addresses configured for MFA
 	validAddresses := 0
-	for _, addr := range conf.Addresses {
-		if addr.Address != "" {
-			validAddresses++
+	if !conf.Disabled {
+		for _, addr := range conf.Addresses {
+			if addr.Address != "" {
+				validAddresses++
+			}
 		}
 	}
 
@@ -296,6 +298,7 @@ func (s *Strategy) populateChooseMethodFlow(r *http.Request, f flow.Flow) error 
 	return nil
 }
 
+// populateEmailSentFlow prepares and updates the UI flow nodes and messages for email-based flows like recovery, verification, login, or registration.
 func (s *Strategy) populateEmailSentFlow(ctx context.Context, f flow.Flow) error {
 	// fresh ui node group
 	freshNodes := f.GetUI().Nodes
@@ -306,6 +309,7 @@ func (s *Strategy) populateEmailSentFlow(ctx context.Context, f flow.Flow) error
 
 	var resendNode *node.Node
 	var backNode *node.Node
+	var trustDeviceNode *node.Node
 
 	switch f.GetFlowName() {
 	case flow.RecoveryFlow:
@@ -325,6 +329,10 @@ func (s *Strategy) populateEmailSentFlow(ctx context.Context, f flow.Flow) error
 		route = login.RouteSubmitFlow
 		codeMetaLabel = text.NewInfoNodeLabelLoginCode()
 		message = text.NewLoginCodeSent()
+		f.(*login.Flow).SetReturnTo()
+		if !strings.HasSuffix(f.(*login.Flow).ReturnTo, "/settings") {
+			trustDeviceNode = node.NewInputField("trust_device", false, node.CodeGroup, node.InputAttributeTypeCheckbox).WithMetaLabel(text.NewInfoTrustDeviceLabel())
+		}
 
 		// preserve the login identifier that was submitted
 		// so we can retry the code flow with the same data
@@ -386,6 +394,10 @@ func (s *Strategy) populateEmailSentFlow(ctx context.Context, f flow.Flow) error
 	// code input field
 	freshNodes.Upsert(nodeCodeInputField().WithMetaLabel(codeMetaLabel))
 
+	if trustDeviceNode != nil {
+		freshNodes.Upsert(trustDeviceNode)
+	}
+
 	// code submit button
 	freshNodes.Append(nodeContinueButton())
 
@@ -398,6 +410,10 @@ func (s *Strategy) populateEmailSentFlow(ctx context.Context, f flow.Flow) error
 	}
 
 	f.GetUI().Nodes = freshNodes
+
+	if err := sortNodes(ctx, f.GetUI().Nodes); err != nil {
+		return err
+	}
 
 	f.GetUI().Method = "POST"
 	f.GetUI().Action = flow.AppendFlowTo(urlx.AppendPaths(s.deps.Config().SelfPublicURL(ctx), route), f.GetID()).String()

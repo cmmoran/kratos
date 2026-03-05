@@ -278,6 +278,30 @@ func (f *Flow) AddContinueWith(c flow.ContinueWith) {
 	f.ContinueWithItems = append(f.ContinueWithItems, c)
 }
 
+func (f *Flow) HasContinueWithRedirect() bool {
+	if len(f.ContinueWithItems) > 0 {
+		for _, item := range f.ContinueWithItems {
+			if _, ok := item.(flow.ContinueWithRedirect); ok {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func (f *Flow) ContinueWithRedirect() flow.ContinueWithRedirect {
+	if len(f.ContinueWithItems) > 0 {
+		for _, item := range f.ContinueWithItems {
+			if cwr, ok := item.(flow.ContinueWithRedirect); ok {
+				return cwr
+			}
+		}
+	}
+
+	return nil
+}
+
 func (f *Flow) ToLoggerField() map[string]any {
 	if f == nil {
 		return map[string]any{}

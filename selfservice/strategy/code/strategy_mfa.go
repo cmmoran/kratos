@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 
 	"github.com/pkg/errors"
-	"github.com/samber/lo"
 
 	"github.com/ory/herodot"
 	"github.com/ory/kratos/identity"
@@ -18,8 +17,27 @@ func FindAllIdentifiers(i *identity.Identity) (result []Address) {
 		if len(a.Via) == 0 || len(a.Value) == 0 {
 			continue
 		}
-
+		if !a.Verified {
+			continue
+		}
 		result = append(result, Address{Via: identity.CodeChannel(a.Via), To: a.Value})
+	}
+	return result
+}
+
+func findVerifiedAddresses(i *identity.Identity, addrs []identity.CredentialsCodeAddress) (result []Address) {
+	for _, a := range i.VerifiableAddresses {
+		if len(a.Via) == 0 || len(a.Value) == 0 {
+			continue
+		}
+		if !a.Verified {
+			continue
+		}
+		for _, addr := range addrs {
+			if addr.Address == a.Value {
+				result = append(result, Address{Via: addr.Channel, To: addr.Address})
+			}
+		}
 	}
 	return result
 }
@@ -41,6 +59,9 @@ func FindCodeAddressCandidates(i *identity.Identity, fallbackEnabled bool) (resu
 				return nil, false, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to unmarshal credentials config: %s", err))
 			}
 		}
+		if conf.Disabled {
+			return nil, false, nil
+		}
 
 		if len(conf.Addresses) == 0 {
 			if !fallbackEnabled {
@@ -50,8 +71,6 @@ func FindCodeAddressCandidates(i *identity.Identity, fallbackEnabled bool) (resu
 
 			return FindAllIdentifiers(i), true, nil
 		}
-		return lo.Map(conf.Addresses, func(item identity.CredentialsCodeAddress, _ int) Address {
-			return Address{Via: item.Channel, To: item.Address}
-		}), true, nil
+		return findVerifiedAddresses(i, conf.Addresses), true, nil
 	}
 }

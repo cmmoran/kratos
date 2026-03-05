@@ -14,9 +14,13 @@ func nodeSubmitRegistration() *node.Node {
 		WithMetaLabel(text.NewInfoSelfServiceRegistrationRegisterCode())
 }
 
-func nodeRegistrationResendNode() *node.Node {
+func nodeRegistrationResendNode(channel ...string) *node.Node {
+	ch := "email"
+	if len(channel) > 0 && channel[0] != "" {
+		ch = channel[0]
+	}
 	return node.NewInputField("resend", identity.CredentialsTypeCodeAuth, node.CodeGroup, node.InputAttributeTypeSubmit).
-		WithMetaLabel(text.NewInfoNodeResendOTP())
+		WithMetaLabel(text.NewInfoNodeResendCodeVia(ch))
 }
 
 func nodeRegistrationSelectCredentialsNode() *node.Node {

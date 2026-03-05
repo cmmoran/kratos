@@ -75,11 +75,15 @@ func (r *SchemaExtensionCredentials) Run(ctx jsonschema.ValidationContext, s sch
 		cred := r.i.GetCredentialsOr(CredentialsTypeCodeAuth, &Credentials{
 			Type:        CredentialsTypeCodeAuth,
 			Identifiers: []string{},
-			Config:      sqlxx.JSONRawMessage("{}"),
+			Config:      sqlxx.JSONRawMessage(`{"disabled": true}`),
 			Version:     1,
 		})
 
 		var conf CredentialsCode
+		err = json.Unmarshal(cred.Config, &conf)
+		if err != nil {
+			conf = CredentialsCode{}
+		}
 		conf.Addresses = r.addresses
 		value, err := x.NormalizeIdentifier(fmt.Sprintf("%s", value), string(via))
 		if err != nil {

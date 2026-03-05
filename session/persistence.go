@@ -70,8 +70,13 @@ type Persister interface {
 
 	// RevokeSessionsIdentityExcept marks all except the given session of an identity inactive. It returns the number of sessions that were revoked.
 	RevokeSessionsIdentityExcept(ctx context.Context, iID, sID uuid.UUID) (int, error)
+
+	DevicePersister
 }
 
 type DevicePersister interface {
 	CreateDevice(ctx context.Context, d *Device) error
+	UpsertDevice(ctx context.Context, d *Device) error
+	ListTrustedDevicesByIdentity(ctx context.Context, iID uuid.UUID) ([]Device, error)
+	ListTrustedDevicesByIdentityWithExpiration(ctx context.Context, iID uuid.UUID, deviceTrustDuration time.Duration) ([]Device, error)
 }
