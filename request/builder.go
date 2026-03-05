@@ -12,8 +12,10 @@ import (
 	"net/url"
 	"reflect"
 	"strings"
+	"text/template"
 	"time"
 
+	"github.com/Masterminds/sprig/v3"
 	"github.com/dgraph-io/ristretto/v2"
 	"github.com/google/go-jsonnet"
 	"github.com/hashicorp/go-retryablehttp"
@@ -35,6 +37,8 @@ const (
 	ContentTypeForm = "application/x-www-form-urlencoded"
 	ContentTypeJSON = "application/json"
 )
+
+type ContextHeader string
 
 type (
 	Dependencies interface {
@@ -206,7 +210,7 @@ func (b *Builder) addURLEncodedBody(ctx context.Context, jsonnetSnippet []byte, 
 	}
 
 	values := map[string]string{}
-	if err := json.Unmarshal([]byte(res), &values); err != nil {
+	if err = json.Unmarshal([]byte(res), &values); err != nil {
 		return errors.WithStack(err)
 	}
 
@@ -226,6 +230,14 @@ func (b *Builder) addURLEncodedBody(ctx context.Context, jsonnetSnippet []byte, 
 
 func (b *Builder) BuildRequest(ctx context.Context, body interface{}) (*retryablehttp.Request, error) {
 	b.r.Header = b.Config.header
+	fields := []ContextHeader{"x-correlation-id", "x-session-entropy"}
+	for _, f := range fields {
+		if v := ctx.Value(f); v != nil {
+			if s, ok := v.(string); ok && s != "" {
+				b.r.Header.Set(string(f), s)
+			}
+		}
+	}
 	b.Config.auth.apply(b.r)
 
 	// According to the HTTP spec any request method, but TRACE is allowed to
@@ -278,6 +290,27 @@ func (b *Builder) BuildRawRequest(body any) (*retryablehttp.Request, error) {
 	}
 
 	return b.r, nil
+}
+
+func (b *Builder) RenderHeadersWithTemplates(headers http.Header) {
+	for k := range b.r.Header {
+		v := b.r.Header.Get(k)
+		if len(v) == 0 {
+			continue
+		}
+		if strings.Contains(v, "{{") && strings.Contains(v, "}}") {
+			tpl, err := template.New("").Funcs(sprig.TxtFuncMap()).Parse(v)
+			if err != nil {
+				continue
+			}
+			var buf bytes.Buffer
+			if err = tpl.Execute(&buf, headers); err != nil {
+				continue
+			} else {
+				b.r.Header.Set(k, buf.String())
+			}
+		}
+	}
 }
 
 func (b *Builder) readTemplate(ctx context.Context) ([]byte, error) {

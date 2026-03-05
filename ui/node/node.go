@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"slices"
 	"sort"
 	"strings"
@@ -147,6 +148,10 @@ func (n *Node) GetValue() interface{} {
 	return n.Attributes.GetValue()
 }
 
+func (n *Node) HasValue() bool {
+	return reflect.ValueOf(n.Attributes.GetValue()).IsValid()
+}
+
 func (n Nodes) Find(id string) *Node {
 	for _, nn := range n {
 		if nn.ID() == id {
@@ -275,9 +280,17 @@ func (n Nodes) SortBySchema(ctx context.Context, opts ...SortOption) error {
 		if node.Attributes.ID() == "method" {
 			return len(n) + len(o.keysInOrder) + 1
 		}
+		// Just kidding, if resend exists, it must be the last element in the list
+		if node.Attributes.ID() == "resend" {
+			return len(n) + len(o.keysInOrder) + 2
+		}
 
-		for i, n := range o.keysInOrder {
-			if strings.HasPrefix(node.ID(), n) {
+		if node.Attributes.ID() == "sms" || node.Attributes.ID() == "email" {
+			return len(n) + len(o.keysInOrder) + 3
+		}
+
+		for i, keyn := range o.keysInOrder {
+			if strings.HasPrefix(node.ID(), keyn) {
 				return i
 			}
 		}

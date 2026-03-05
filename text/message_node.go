@@ -97,7 +97,7 @@ func NewInfoNodeLabelID() *Message {
 
 func NewInfoNodeInputEmail() *Message {
 	return &Message{
-		ID:   InfoNodeLabelEmail,
+		ID:   InfoNodeLabelChannel,
 		Text: "Email",
 		Type: Info,
 	}
@@ -119,11 +119,34 @@ func NewInfoNodeInputEmailOrPhone() *Message {
 	}
 }
 
+func NewInfoNodeInputForChannel(channel string) *Message {
+	switch channel {
+	case "sms":
+		return NewInfoNodeInputPhoneNumber()
+	default:
+		return NewInfoNodeInputEmail()
+	}
+}
+
 func NewInfoNodeResendOTP() *Message {
 	return &Message{
-		ID:   InfoNodeLabelResendOTP,
+		ID:   InfoNodeLabelResendCode,
 		Text: "Resend code",
 		Type: Info,
+	}
+}
+
+func NewInfoNodeResendCodeVia(channel string) *Message {
+	if channel == "" {
+		return NewInfoNodeResendOTP()
+	}
+	return &Message{
+		ID:   InfoNodeLabelResendCode,
+		Text: "Resend code via " + channel,
+		Type: Info,
+		Context: context(map[string]any{
+			"channel": channel,
+		}),
 	}
 }
 

@@ -270,3 +270,12 @@ func (f *Flow) ToLoggerField() map[string]any {
 		"state":       f.State,
 	}
 }
+
+func (f *Flow) HasContinueWithRedirect() bool {
+	_, ok := flow.FirstContinueWithRedirect(f.ContinueWithItems)
+	return ok
+}
+func (f *Flow) ContinueWithRedirect() flow.ContinueWithRedirect {
+	cwr, _ := flow.FirstContinueWithRedirect(f.ContinueWithItems)
+	return cwr
+}

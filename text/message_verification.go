@@ -20,20 +20,23 @@ func NewErrorValidationVerificationFlowExpired(expiredAt time.Time) *Message {
 	}
 }
 
-func NewInfoSelfServiceVerificationSuccessful() *Message {
+func NewInfoSelfServiceVerificationSuccessful(channel ...string) *Message {
+	ch := "address"
+	if len(channel) > 0 && channel[0] != "" {
+		ch = channel[0]
+	}
 	return &Message{
 		ID:   InfoSelfServiceVerificationSuccessful,
 		Type: Success,
-		Text: "You successfully verified your email address.",
+		Text: fmt.Sprintf("You successfully verified your %s.", ch),
+		Context: context(map[string]any{
+			"channel": ch,
+		}),
 	}
 }
 
 func NewInfoSelfServiceVerificationPhoneSuccessful() *Message {
-	return &Message{
-		ID:   InfoSelfServiceVerificationPhoneSuccessful,
-		Type: Success,
-		Text: "You successfully verified your phone number.",
-	}
+	return NewInfoSelfServiceVerificationSuccessful("phone number")
 }
 
 func NewVerificationEmailSent() *Message {
@@ -76,18 +79,22 @@ func NewErrorValidationVerificationCodeInvalidOrAlreadyUsed() *Message {
 	}
 }
 
-func NewVerificationEmailWithCodeSent() *Message {
+func NewVerificationCodeSent(channel, strategy string) *Message {
 	return &Message{
-		ID:   InfoSelfServiceVerificationEmailWithCodeSent,
+		ID:   InfoSelfServiceVerificationCodeSent,
 		Type: Info,
-		Text: "An email containing a verification code has been sent to the email address you provided. If you have not received an email, check the spelling of the address and make sure to use the address you registered with.",
+		Text: fmt.Sprintf("A verification %s has been sent to the %s you provided.", strategy, channel),
+		Context: context(map[string]any{
+			"strategy": strategy,
+			"channel":  channel,
+		}),
 	}
 }
 
+func NewVerificationEmailWithCodeSent() *Message {
+	return NewVerificationCodeSent("email", "code")
+}
+
 func NewVerificationPhoneWithCodeSent() *Message {
-	return &Message{
-		ID:   InfoSelfServiceVerificationPhoneWithCodeSent,
-		Type: Info,
-		Text: "A text message containing a verification code has been sent to the phone number you provided. If you have not received a text message, check the spelling of the number and make sure to use the number you registered with.",
-	}
+	return NewVerificationCodeSent("phone number", "code")
 }

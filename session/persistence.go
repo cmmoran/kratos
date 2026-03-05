@@ -95,8 +95,13 @@ type Persister interface {
 	// rows actually deleted (in the range [0, limit]). A returned count
 	// below `limit` signals that no more matching rows remain.
 	DeleteAllSessions(ctx context.Context, limit int) (int, error)
+
+	DevicePersister
 }
 
 type DevicePersister interface {
 	CreateDevice(ctx context.Context, d *Device) error
+	UpsertDevice(ctx context.Context, d *Device) error
+	ListTrustedDevicesByIdentity(ctx context.Context, iID uuid.UUID) ([]Device, error)
+	ListTrustedDevicesByIdentityWithExpiration(ctx context.Context, iID uuid.UUID, deviceTrustDuration time.Duration) ([]Device, error)
 }

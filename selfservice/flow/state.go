@@ -33,6 +33,7 @@ const (
 	// Note: this state should actually be called `StateMessageSent`,
 	// where a 'Message' is a code or link sent to an address (e.g. `email`, `sms`, etc).
 	StateEmailSent       State = "sent_email"
+	StateSmsSent         State = "sent_sms"
 	StatePassedChallenge State = "passed_challenge"
 	StateShowForm        State = "show_form"
 	StateSuccess         State = "success"
@@ -56,6 +57,7 @@ const (
 var states = []State{
 	StateChooseMethod,
 	StateEmailSent,
+	StateSmsSent,
 	StatePassedChallenge,
 }
 
@@ -69,6 +71,12 @@ func indexOf(current State) int {
 }
 
 func HasReachedState(expected, actual State) bool {
+	if expected == StateSmsSent {
+		expected = StateEmailSent
+	}
+	if actual == StateSmsSent {
+		actual = StateEmailSent
+	}
 	return indexOf(actual) >= indexOf(expected)
 }
 
@@ -76,7 +84,15 @@ func IsStateRecoveryV2(state State) bool {
 	return strings.HasPrefix(state.String(), "recovery_")
 }
 
-func NextState(current State) State {
+func NextState(current State, via ...string) State {
+	if current == StateChooseMethod && len(via) > 0 {
+		switch via[0] {
+		case "sms":
+			return StateSmsSent
+		case "email":
+			return StateEmailSent
+		}
+	}
 	if current == StatePassedChallenge {
 		return StatePassedChallenge
 	}

@@ -6,7 +6,10 @@ package totp
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
+	"time"
 
+	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
@@ -50,6 +53,12 @@ func (s *Strategy) PopulateLoginMethod(r *http.Request, requestedAAL identity.Au
 
 	sr.UI.SetCSRF(s.d.GenerateCSRFToken(r))
 	sr.UI.SetNode(node.NewInputField("totp_code", "", node.TOTPGroup, node.InputAttributeTypeText, node.WithRequiredInputAttribute).WithMetaLabel(text.NewInfoLoginTOTPLabel()))
+	// if the return_to is <host>/settings, do _not_ add 'trust_device'
+	sr.SetReturnTo()
+	if !strings.HasSuffix(sr.ReturnTo, "/settings") {
+		s.d.Logger().WithRequest(r).WithField("return_to", sr.ReturnTo).Debug("adding trust_device to login flow")
+		sr.UI.SetNode(node.NewInputField("trust_device", false, node.TOTPGroup, node.InputAttributeTypeCheckbox).WithMetaLabel(text.NewInfoTrustDeviceLabel()))
+	}
 	sr.UI.GetNodes().Append(node.NewInputField("method", s.ID(), node.TOTPGroup, node.InputAttributeTypeSubmit).WithMetaLabel(text.NewInfoLoginTOTP()))
 
 	return nil
@@ -58,6 +67,7 @@ func (s *Strategy) PopulateLoginMethod(r *http.Request, requestedAAL identity.Au
 func (s *Strategy) handleLoginError(r *http.Request, f *login.Flow, err error) error {
 	if f != nil {
 		f.UI.Nodes.ResetNodes("totp_code")
+		f.UI.Nodes.ResetNodes("trust_device")
 		if f.Type == flow.TypeBrowser {
 			f.UI.SetCSRF(s.d.GenerateCSRFToken(r))
 		}
@@ -82,6 +92,11 @@ type updateLoginFlowWithTotpMethod struct {
 	//
 	// required: true
 	TOTPCode string `json:"totp_code"`
+
+	// Trust this device
+	//
+	// required: false
+	TrustDevice bool `json:"trust_device"`
 
 	// Transient data to pass along to any webhooks
 	//
@@ -137,6 +152,25 @@ func (s *Strategy) Login(_ http.ResponseWriter, r *http.Request, f *login.Flow, 
 	f.Active = s.ID()
 	if err = s.d.LoginFlowPersister().UpdateLoginFlow(ctx, f); err != nil {
 		return nil, s.handleLoginError(r, f, x.WrapWithIdentityIDError(errors.WithStack(herodot.ErrInternalServerError().WithReason("Could not update flow").WithDebug(err.Error())), i.ID))
+	}
+
+	if p.TrustDevice {
+		currentDevice := sess.SetSessionDeviceInformation(r.WithContext(ctx))
+		if currentDevice.DeviceTrustConfidence(sess.Devices) > 0.0 {
+			method := s.CompletedAuthenticationMethod(ctx)
+			method.CompletedAt = time.Now().UTC()
+			method.DeviceTrustBased = true
+			if currentDevice.SessionID == uuid.Nil || currentDevice.SessionID != sess.ID {
+				s.d.Logger().WithRequest(r).WithField("current_device", *currentDevice).Warn("current device session id mismatch")
+				(*currentDevice).SessionID = sess.ID
+			}
+			(*currentDevice).TrustPending = new(p.TrustDevice)
+			(*currentDevice).AMR = append((*currentDevice).AMR, method)
+			s.d.Logger().WithRequest(r).WithField("current_device", *currentDevice).WithField("devices", sess.Devices).WithField("amr", method).Debug("setting device to trusted")
+			if err = s.d.SessionPersister().UpsertDevice(ctx, currentDevice); err != nil {
+				return i, errors.WithStack(herodot.ErrInternalServerError.WithReason("Could not update device").WithDebug(err.Error()))
+			}
+		}
 	}
 
 	return i, nil
