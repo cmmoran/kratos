@@ -1,0 +1,51 @@
+version: "3"
+
+vars:
+  REMOTE: '{{default "origin" .REMOTE}}'
+  BASE: '{{default "master" .BASE}}'
+  BRANCH: '{{default "device-trust-rebase" .BRANCH}}'
+
+tasks:
+  status:
+    desc: Show repo and branch status for the rebase workflow
+    cmds:
+      - git status --short
+      - git rev-list --left-right --count {{.BASE}}...HEAD
+      - git log --oneline --decorate --max-count=8 --graph
+
+  sync:
+    desc: Fetch latest refs from remote
+    cmds:
+      - git fetch {{.REMOTE}} --prune
+
+  rebase:
+    desc: Rebase current branch onto remote base branch
+    preconditions:
+      - sh: '[ -z "$(git status --porcelain)" ]'
+        msg: "Working tree is not clean. Commit/stash changes first."
+    cmds:
+      - git rebase {{.REMOTE}}/{{.BASE}}
+
+  smoke:
+    desc: Run quick post-rebase checks
+    cmds:
+      - go test ./cmd/clidoc
+      - go test -tags sqlite ./persistence/sql/migratest -run 'TestMigrations_SQLite/suite=fixtures/case=session$' -count=1
+
+  push:
+    desc: Force-push rebased branch with lease
+    cmds:
+      - git push --force-with-lease {{.REMOTE}} {{.BRANCH}}
+
+  update:
+    desc: Full weekly flow (fetch -> rebase -> smoke -> push)
+    preconditions:
+      - sh: '[ -z "$(git status --porcelain)" ]'
+        msg: "Working tree is not clean. Commit/stash changes first."
+      - sh: '[ "$(git rev-parse --abbrev-ref HEAD)" = "{{.BRANCH}}" ]'
+        msg: "Checkout {{.BRANCH}} before running update."
+    deps: [sync]
+    cmds:
+      - task: rebase
+      - task: smoke
+      - task: push
