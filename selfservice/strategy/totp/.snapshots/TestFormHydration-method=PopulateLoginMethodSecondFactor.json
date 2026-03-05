@@ -36,6 +36,25 @@
     "type": "input",
     "group": "totp",
     "attributes": {
+      "name": "trust_device",
+      "type": "checkbox",
+      "value": false,
+      "disabled": false,
+      "node_type": "input"
+    },
+    "messages": [],
+    "meta": {
+      "label": {
+        "id": 91010000,
+        "text": "Trust this device",
+        "type": "info"
+      }
+    }
+  },
+  {
+    "type": "input",
+    "group": "totp",
+    "attributes": {
       "name": "method",
       "type": "submit",
       "value": "totp",

@@ -122,12 +122,13 @@ func ensureReplacement(t *testing.T, index string, ui kratos.UiContainer, expect
 
 func TestCompleteSettings(t *testing.T) {
 	conf, reg := pkg.NewFastRegistryWithMocks(t,
-		configx.WithValues(map[string]any{
-			config.ViperKeySelfServiceStrategyConfig + "." + string(identity.CredentialsTypePassword) + ".enabled": false,
-			config.ViperKeySelfServiceStrategyConfig + ".profile.enabled":                                          false,
-			config.ViperKeySelfServiceSettingsRequiredAAL:                                                          "aal1",
-			config.ViperKeySelfServiceSettingsPrivilegedAuthenticationAfter:                                        "1m",
-		}),
+			configx.WithValues(map[string]any{
+				config.ViperKeySelfServiceStrategyConfig + "." + string(identity.CredentialsTypePassword) + ".enabled": false,
+				config.ViperKeySelfServiceStrategyConfig + ".code.enabled":                                              false,
+				config.ViperKeySelfServiceStrategyConfig + ".profile.enabled":                                          false,
+				config.ViperKeySelfServiceSettingsRequiredAAL:                                                          "aal1",
+				config.ViperKeySelfServiceSettingsPrivilegedAuthenticationAfter:                                        "1m",
+			}),
 		enabledWebauthn,
 		configx.WithValues(testhelpers.DefaultIdentitySchemaConfig("file://./stub/settings.schema.json")),
 	)

@@ -816,6 +816,7 @@ func TestDriverDefault_Strategies(t *testing.T) {
 					config.ViperKeySelfServiceStrategyConfig + ".oidc.enabled":     false,
 					config.ViperKeySelfServiceStrategyConfig + ".profile.enabled":  false,
 				})},
+				expect: []string{"code"},
 			},
 			{
 				configOptions: []configx.OptionModifier{configx.WithValues(map[string]any{
@@ -823,7 +824,7 @@ func TestDriverDefault_Strategies(t *testing.T) {
 					config.ViperKeySelfServiceStrategyConfig + ".profile.enabled":  true,
 					config.ViperKeySelfServiceStrategyConfig + ".password.enabled": false,
 				})},
-				expect: []string{"profile"},
+				expect: []string{"profile", "code"},
 			},
 			{
 				configOptions: []configx.OptionModifier{configx.WithValues(map[string]any{
@@ -832,20 +833,20 @@ func TestDriverDefault_Strategies(t *testing.T) {
 					config.ViperKeySelfServiceStrategyConfig + ".password.enabled": false,
 					config.ViperKeySelfServiceStrategyConfig + ".totp.enabled":     true,
 				})},
-				expect: []string{"profile", "totp"},
+				expect: []string{"profile", "code", "totp"},
 			},
 			{
 				configOptions: []configx.OptionModifier{configx.WithValues(map[string]any{
 					config.ViperKeyDSN: config.DefaultSQLiteMemoryDSN,
 				})},
-				expect: []string{"profile", "password"},
+				expect: []string{"profile", "password", "code"},
 			},
 			{
 				configOptions: []configx.OptionModifier{
 					configx.WithConfigFiles("../test/e2e/profiles/verification/.kratos.yml"),
 					configx.WithValue(config.ViperKeyDSN, config.DefaultSQLiteMemoryDSN),
 				},
-				expect: []string{"profile", "password"},
+				expect: []string{"profile", "password", "code"},
 			},
 		} {
 			t.Run(fmt.Sprintf("run=%d", k), func(t *testing.T) {
@@ -888,7 +889,7 @@ func TestDefaultRegistry_AllStrategies(t *testing.T) {
 	})
 
 	t.Run("case=all settings strategies", func(t *testing.T) {
-		expects := []string{"profile", "password", "oidc", "totp", "passkey", "webauthn", "lookup_secret"}
+		expects := []string{"profile", "password", "oidc", "code", "totp", "passkey", "webauthn", "lookup_secret"}
 		s := reg.AllSettingsStrategies()
 		require.Len(t, s, len(expects))
 		for k, e := range expects {

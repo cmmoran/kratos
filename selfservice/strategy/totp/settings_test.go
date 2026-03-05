@@ -40,6 +40,7 @@ func TestCompleteSettings(t *testing.T) {
 
 	conf, reg := pkg.NewFastRegistryWithMocks(t,
 		configx.WithValues(testhelpers.MethodEnableConfig(identity.CredentialsTypePassword, false)),
+		configx.WithValues(testhelpers.MethodEnableConfig(identity.CredentialsTypeCodeAuth, false)),
 		configx.WithValues(testhelpers.MethodEnableConfig("profile", false)),
 		configx.WithValues(testhelpers.MethodEnableConfig(identity.CredentialsTypeTOTP, true)),
 		configx.WithValues(testhelpers.DefaultIdentitySchemaConfig("file://./stub/settings.schema.json")),
@@ -157,7 +158,8 @@ func TestCompleteSettings(t *testing.T) {
 		t.Run("type=api", func(t *testing.T) {
 			actual, res := doAPIFlow(t, payload, id)
 			assert.Equal(t, http.StatusForbidden, res.StatusCode)
-			assert.Contains(t, gjson.Get(actual, "redirect_browser_to").String(), publicTS.URL+"/self-service/login/browser?refresh=true&return_to=")
+			assert.Contains(t, gjson.Get(actual, "redirect_browser_to").String(), publicTS.URL+"/self-service/login/browser?")
+			assert.Contains(t, gjson.Get(actual, "redirect_browser_to").String(), "refresh=true&return_to=")
 			assertx.EqualAsJSONExcept(t, settings.NewFlowNeedsReAuth(), json.RawMessage(actual), []string{"redirect_browser_to"})
 			checkIdentity(t)
 		})
@@ -165,7 +167,8 @@ func TestCompleteSettings(t *testing.T) {
 		t.Run("type=spa", func(t *testing.T) {
 			actual, res := doBrowserFlow(t, true, payload, id)
 			assert.Equal(t, http.StatusForbidden, res.StatusCode)
-			assert.Contains(t, gjson.Get(actual, "redirect_browser_to").String(), publicTS.URL+"/self-service/login/browser?refresh=true&return_to=")
+			assert.Contains(t, gjson.Get(actual, "redirect_browser_to").String(), publicTS.URL+"/self-service/login/browser?")
+			assert.Contains(t, gjson.Get(actual, "redirect_browser_to").String(), "refresh=true&return_to=")
 			assertx.EqualAsJSONExcept(t, settings.NewFlowNeedsReAuth(), json.RawMessage(actual), []string{"redirect_browser_to"})
 			checkIdentity(t)
 		})
@@ -174,7 +177,7 @@ func TestCompleteSettings(t *testing.T) {
 			actual, res := doBrowserFlow(t, false, payload, id)
 			assert.Equal(t, http.StatusOK, res.StatusCode)
 			assert.Contains(t, res.Request.URL.String(), loginTS.URL+"/login-ts")
-			assertx.EqualAsJSON(t, text.NewInfoLoginReAuth().Text, json.RawMessage(gjson.Get(actual, "ui.messages.0.text").Raw), actual)
+			assert.Contains(t, []string{text.NewInfoLoginReAuth().Text, text.NewInfoLoginMFA().Text}, gjson.Get(actual, "ui.messages.0.text").String(), actual)
 			checkIdentity(t)
 		})
 	})
@@ -198,7 +201,8 @@ func TestCompleteSettings(t *testing.T) {
 		t.Run("type=api", func(t *testing.T) {
 			actual, res := doAPIFlow(t, payload, id)
 			assert.Equal(t, http.StatusForbidden, res.StatusCode)
-			assert.Contains(t, gjson.Get(actual, "redirect_browser_to").String(), publicTS.URL+"/self-service/login/browser?refresh=true&return_to=")
+			assert.Contains(t, gjson.Get(actual, "redirect_browser_to").String(), publicTS.URL+"/self-service/login/browser?")
+			assert.Contains(t, gjson.Get(actual, "redirect_browser_to").String(), "refresh=true&return_to=")
 			assertx.EqualAsJSONExcept(t, settings.NewFlowNeedsReAuth(), json.RawMessage(actual), []string{"redirect_browser_to"})
 			checkIdentity(t)
 		})
@@ -206,7 +210,8 @@ func TestCompleteSettings(t *testing.T) {
 		t.Run("type=spa", func(t *testing.T) {
 			actual, res := doBrowserFlow(t, true, payload, id)
 			assert.Equal(t, http.StatusForbidden, res.StatusCode)
-			assert.Contains(t, gjson.Get(actual, "redirect_browser_to").String(), publicTS.URL+"/self-service/login/browser?refresh=true&return_to=")
+			assert.Contains(t, gjson.Get(actual, "redirect_browser_to").String(), publicTS.URL+"/self-service/login/browser?")
+			assert.Contains(t, gjson.Get(actual, "redirect_browser_to").String(), "refresh=true&return_to=")
 			assertx.EqualAsJSONExcept(t, settings.NewFlowNeedsReAuth(), json.RawMessage(actual), []string{"redirect_browser_to"})
 			checkIdentity(t)
 		})
@@ -303,8 +308,10 @@ func TestCompleteSettings(t *testing.T) {
 
 	t.Run("type=set up TOTP device", func(t *testing.T) {
 		checkIdentity := func(t *testing.T, id *identity.Identity, key string) {
-			i, cred, err := reg.PrivilegedIdentityPool().FindByCredentialsIdentifier(t.Context(), identity.CredentialsTypeTOTP, id.ID.String())
+			i, err := reg.PrivilegedIdentityPool().GetIdentityConfidential(t.Context(), id.ID)
 			require.NoError(t, err)
+			cred, ok := i.GetCredentials(identity.CredentialsTypeTOTP)
+			require.True(t, ok)
 			var c identity.CredentialsTOTPConfig
 			require.NoError(t, json.Unmarshal(cred.Config, &c))
 			actual, err := otp.NewKeyFromURL(c.TOTPURL)

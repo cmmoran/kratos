@@ -41,19 +41,6 @@
       {
         "attributes": {
           "disabled": false,
-          "name": "method",
-          "node_type": "input",
-          "type": "hidden",
-          "value": "code"
-        },
-        "group": "code",
-        "messages": [],
-        "meta": {},
-        "type": "input"
-      },
-      {
-        "attributes": {
-          "disabled": false,
           "name": "code",
           "node_type": "input",
           "required": true,
@@ -68,6 +55,38 @@
             "type": "info"
           }
         },
+        "type": "input"
+      },
+      {
+        "attributes": {
+          "disabled": false,
+          "name": "trust_device",
+          "node_type": "input",
+          "type": "checkbox",
+          "value": false
+        },
+        "group": "code",
+        "messages": [],
+        "meta": {
+          "label": {
+            "id": 91010000,
+            "text": "Trust this device",
+            "type": "info"
+          }
+        },
+        "type": "input"
+      },
+      {
+        "attributes": {
+          "disabled": false,
+          "name": "method",
+          "node_type": "input",
+          "type": "hidden",
+          "value": "code"
+        },
+        "group": "code",
+        "messages": [],
+        "meta": {},
         "type": "input"
       },
       {
@@ -94,8 +113,7 @@
           "disabled": false,
           "name": "resend",
           "node_type": "input",
-          "type": "submit",
-          "value": "code"
+          "type": "submit"
         },
         "group": "code",
         "messages": [],

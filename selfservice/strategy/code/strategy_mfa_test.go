@@ -21,8 +21,8 @@ func TestFindAllIdentifiers(t *testing.T) {
 			name: "valid verifiable addresses",
 			input: &identity.Identity{
 				VerifiableAddresses: []identity.VerifiableAddress{
-					{Via: "email", Value: "user@example.com"},
-					{Via: "sms", Value: "+1234567890"},
+					{Via: "email", Value: "user@example.com", Verified: true},
+					{Via: "sms", Value: "+1234567890", Verified: true},
 				},
 			},
 			expected: []Address{
@@ -71,6 +71,10 @@ func TestFindCodeAddressCandidates(t *testing.T) {
 						Config: []byte(`{"addresses":[{"channel":"email","address":"user@example.com"},{"channel":"sms","address":"+1234567890"}]}`),
 					},
 				},
+				VerifiableAddresses: []identity.VerifiableAddress{
+					{Via: "email", Value: "user@example.com", Verified: true},
+					{Via: "sms", Value: "+1234567890", Verified: true},
+				},
 			},
 			fallbackEnabled: false,
 			expected: []Address{
@@ -84,8 +88,8 @@ func TestFindCodeAddressCandidates(t *testing.T) {
 			name: "no credentials, fallback enabled",
 			input: &identity.Identity{
 				VerifiableAddresses: []identity.VerifiableAddress{
-					{Via: "email", Value: "user@example.com"},
-					{Via: "sms", Value: "+1234567890"},
+					{Via: "email", Value: "user@example.com", Verified: true},
+					{Via: "sms", Value: "+1234567890", Verified: true},
 				},
 			},
 			fallbackEnabled: true,
@@ -100,8 +104,8 @@ func TestFindCodeAddressCandidates(t *testing.T) {
 			name: "no credentials, fallback disabled",
 			input: &identity.Identity{
 				VerifiableAddresses: []identity.VerifiableAddress{
-					{Via: "email", Value: "user@example.com"},
-					{Via: "sms", Value: "+1234567890"},
+					{Via: "email", Value: "user@example.com", Verified: true},
+					{Via: "sms", Value: "+1234567890", Verified: true},
 				},
 			},
 			fallbackEnabled: false,
