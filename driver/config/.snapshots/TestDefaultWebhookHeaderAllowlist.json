@@ -15,5 +15,7 @@
   "Sec-Fetch-Site",
   "Sec-Fetch-User",
   "True-Client-Ip",
-  "User-Agent"
+  "User-Agent",
+  "X-Correlation-Id",
+  "X-Session-Entropy"
 ]

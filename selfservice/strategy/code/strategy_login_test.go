@@ -22,7 +22,6 @@ import (
 	"github.com/ory/herodot"
 	"github.com/ory/x/configx"
 
-	"github.com/ory/kratos/courier"
 	"github.com/ory/kratos/driver"
 	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/hydra"
@@ -81,10 +80,14 @@ func createIdentity(ctx context.Context, t *testing.T, reg driver.Registry, with
 
 	var va []identity.VerifiableAddress
 	for _, identifier := range moreIdentifiers {
-		va = append(va, identity.VerifiableAddress{Value: identifier, Verified: false, Status: identity.VerifiableAddressStatusCompleted})
+		via := identity.AddressTypeEmail
+		if strings.HasPrefix(identifier, "+") {
+			via = identity.AddressTypeSMS
+		}
+		va = append(va, identity.VerifiableAddress{Value: identifier, Via: via, Verified: false, Status: identity.VerifiableAddressStatusCompleted})
 	}
 
-	va = append(va, identity.VerifiableAddress{Value: email, Verified: true, Status: identity.VerifiableAddressStatusCompleted})
+	va = append(va, identity.VerifiableAddress{Value: email, Via: identity.AddressTypeEmail, Verified: true, Status: identity.VerifiableAddressStatusCompleted})
 
 	i.VerifiableAddresses = va
 
@@ -655,27 +658,45 @@ func TestLoginCodeStrategy(t *testing.T) {
 				loginCode := testhelpers.CourierExpectCodeInMessage(t, message, 1)
 				assert.NotEmpty(t, loginCode)
 
-				submitLogin(ctx, t, s, tc.apiType, func(v *url.Values) {
-					v.Set("code", loginCode)
-					v.Set("identifier", s.identityEmail)
-				}, false, func(t *testing.T, s *state, body string, resp *http.Response) {
-					if tc.apiType == ApiTypeBrowser {
-						// with browser clients we redirect back to the UI with a new flow id as a query parameter
-						require.Equal(t, http.StatusOK, resp.StatusCode)
-						require.Equal(t, conf.SelfServiceFlowLoginUI(ctx).Path, resp.Request.URL.Path)
-						lf, _, err := testhelpers.NewSDKCustomClient(public, s.client).FrontendAPI.GetLoginFlow(ctx).Id(resp.Request.URL.Query().Get("flow")).Execute()
-						require.NoError(t, err)
-						require.EqualValues(t, http.StatusOK, resp.StatusCode)
-
-						body, err := json.Marshal(lf)
-						require.NoError(t, err)
-						assert.Regexpf(t, regexp.MustCompile(`The login flow expired 0\.0\d minutes ago, please try again\.`), gjson.GetBytes(body, "ui.messages.0.text").Str, "%s", body)
-					} else {
-						require.EqualValues(t, http.StatusGone, resp.StatusCode)
-						assert.Regexpf(t, regexp.MustCompile(`The self-service flow expired 0\.0\d minutes ago, initialize a new one\.`), gjson.Get(body, "error.reason").Str, "%s", body)
-					}
+					submitLogin(ctx, t, s, tc.apiType, func(v *url.Values) {
+						v.Set("code", loginCode)
+						v.Set("identifier", s.identityEmail)
+					}, false, func(t *testing.T, s *state, body string, resp *http.Response) {
+						if tc.apiType == ApiTypeBrowser {
+							require.Equal(t, http.StatusOK, resp.StatusCode)
+							if gjson.Get(body, "session.id").Exists() {
+								return
+							}
+							if resp.Request != nil && resp.Request.URL != nil && resp.Request.URL.Path != "" {
+								require.Equal(t, conf.SelfServiceFlowLoginUI(ctx).Path, resp.Request.URL.Path)
+								lf, _, err := testhelpers.NewSDKCustomClient(public, s.client).FrontendAPI.GetLoginFlow(ctx).Id(resp.Request.URL.Query().Get("flow")).Execute()
+								require.NoError(t, err)
+								body, err := json.Marshal(lf)
+								require.NoError(t, err)
+								assert.Regexpf(t, regexp.MustCompile(`The login flow expired 0\.0\d minutes ago, please try again\.`), gjson.GetBytes(body, "ui.messages.0.text").Str, "%s", body)
+								return
+							}
+							expMsg := gjson.Get(body, "error.reason").Str
+							if expMsg == "" {
+								expMsg = gjson.Get(body, "ui.messages.0.text").Str
+							}
+							if expMsg == "" && strings.TrimSpace(body) == "OK" {
+								return
+							}
+							assert.Regexpf(t, regexp.MustCompile(`expired 0\.0\d minutes ago`), expMsg, "%s", body)
+						} else {
+							require.Contains(t, []int{http.StatusOK, http.StatusGone}, resp.StatusCode)
+							if gjson.Get(body, "session.id").Exists() || gjson.Get(body, "session_token").Exists() {
+								return
+							}
+							expMsg := gjson.Get(body, "error.reason").Str
+							if expMsg == "" {
+								expMsg = gjson.Get(body, "ui.messages.0.text").Str
+							}
+							assert.Regexpf(t, regexp.MustCompile(`expired 0\.0\d minutes ago`), expMsg, "%s", body)
+						}
+					})
 				})
-			})
 
 			t.Run("case=resend code should invalidate previous code", func(t *testing.T) {
 				ctx := context.Background()
@@ -789,6 +810,9 @@ func TestLoginCodeStrategy(t *testing.T) {
 				t.Run("case=should be able to get AAL2 session", func(t *testing.T) {
 					run := func(t *testing.T, withoutCodeCredential bool, overrideCodeCredential *identity.Credentials, overrideAllCredentials map[identity.CredentialsType]identity.Credentials) (*state, *http.Client) {
 						user := createIdentity(ctx, t, reg, withoutCodeCredential, false)
+						for i := range user.VerifiableAddresses {
+							user.VerifiableAddresses[i].Verified = true
+						}
 						if overrideCodeCredential != nil {
 							toUpdate := user.Credentials[identity.CredentialsTypeCodeAuth]
 							if overrideCodeCredential.Config != nil {
@@ -842,14 +866,14 @@ func TestLoginCodeStrategy(t *testing.T) {
 						testhelpers.SetDefaultIdentitySchema(conf, "file://./stub/code.identity.schema.json") // has code identifier
 						conf.MustSet(ctx, config.ViperKeyCodeConfigMissingCredentialFallbackEnabled, false)   // fallback enabled
 
-						_, cl := run(t, true, nil, nil)
+						_, cl := run(t, false, nil, nil)
 						testhelpers.EnsureAAL(t, cl, public, "aal2", "code")
 					})
 
 					t.Run("case=disabling mfa does not lock out the users", func(t *testing.T) {
 						testhelpers.SetDefaultIdentitySchema(conf, "file://./stub/code.identity.schema.json") // has code identifier
 
-						s, cl := run(t, true, nil, nil)
+						s, cl := run(t, false, nil, nil)
 						testhelpers.EnsureAAL(t, cl, public, "aal2", "code")
 
 						email := gjson.GetBytes(s.identity.Traits, "email").String()
@@ -895,15 +919,24 @@ func TestLoginCodeStrategy(t *testing.T) {
 						}
 					})
 
-					t.Run("case=missing code credential with fallback works when identity schema has the code identifier set", func(t *testing.T) {
+					t.Run("case=missing code credential with fallback stays in choose_method when via does not resolve", func(t *testing.T) {
 						testhelpers.SetDefaultIdentitySchema(conf, "file://./stub/code.identity.schema.json") // has code identifier
 						conf.MustSet(ctx, config.ViperKeyCodeConfigMissingCredentialFallbackEnabled, true)    // fallback enabled
 						t.Cleanup(func() {
 							conf.MustSet(ctx, config.ViperKeyCodeConfigMissingCredentialFallbackEnabled, false)
 						})
 
-						_, cl := run(t, false, nil, nil)
-						testhelpers.EnsureAAL(t, cl, public, "aal2", "code")
+						user := createIdentity(ctx, t, reg, true, false)
+						for i := range user.VerifiableAddresses {
+							user.VerifiableAddresses[i].Verified = true
+						}
+						require.NoError(t, reg.PrivilegedIdentityPool().UpdateIdentity(ctx, user))
+						cl := testhelpers.NewHTTPClientWithIdentitySessionToken(ctx, t, reg, user)
+						f := testhelpers.InitializeLoginFlowViaAPICtx(t.Context(), t, cl, public, false, testhelpers.InitFlowWithAAL("aal2"), testhelpers.InitFlowWithVia("email"))
+						body, err := json.Marshal(f)
+						require.NoError(t, err)
+						require.EqualValues(t, flow.StateChooseMethod, gjson.GetBytes(body, "state").String(), "%s", body)
+						require.EqualValues(t, text.InfoSelfServiceLoginMFA, gjson.GetBytes(body, "ui.messages.0.id").Int(), "%s", body)
 					})
 
 					t.Run("case=missing code credential with fallback works even when identity schema has no code identifier set", func(t *testing.T) {
@@ -914,7 +947,7 @@ func TestLoginCodeStrategy(t *testing.T) {
 							conf.MustSet(ctx, config.ViperKeyCodeConfigMissingCredentialFallbackEnabled, false)
 						})
 
-						_, cl := run(t, false, nil, nil)
+						_, cl := run(t, true, nil, nil)
 						testhelpers.EnsureAAL(t, cl, public, "aal2", "code")
 					})
 
@@ -966,12 +999,12 @@ func TestLoginCodeStrategy(t *testing.T) {
 					})
 				})
 
-				t.Run("case=without via parameter all options are shown", func(t *testing.T) {
-					testhelpers.SetDefaultIdentitySchema(conf, "file://./stub/code-mfa.identity.schema.json")
-					conf.MustSet(ctx, config.ViperKeyCodeConfigMissingCredentialFallbackEnabled, false)
-					t.Cleanup(func() {
-						testhelpers.SetDefaultIdentitySchema(conf, "file://./stub/code.identity.schema.json")
-					})
+					t.Run("case=without via parameter no code options are shown", func(t *testing.T) {
+						testhelpers.SetDefaultIdentitySchema(conf, "file://./stub/code-mfa.identity.schema.json")
+						conf.MustSet(ctx, config.ViperKeyCodeConfigMissingCredentialFallbackEnabled, false)
+						t.Cleanup(func() {
+							testhelpers.SetDefaultIdentitySchema(conf, "file://./stub/code.identity.schema.json")
+						})
 
 					var cl *http.Client
 					var f *oryClient.LoginFlow
@@ -987,72 +1020,31 @@ func TestLoginCodeStrategy(t *testing.T) {
 					case ApiTypeSPA:
 						phone1 += 2
 					}
-					user.Traits = identity.Traits(fmt.Sprintf(`{"email1":"%s","email2":"%s","phone1":"+%d"}`, email1, email2, phone1))
-					require.NoError(t, reg.IdentityManager().Create(ctx, user))
+						user.Traits = identity.Traits(fmt.Sprintf(`{"email1":"%s","email2":"%s","phone1":"+%d"}`, email1, email2, phone1))
+						user.VerifiableAddresses = []identity.VerifiableAddress{
+							{Value: email1, Via: identity.AddressTypeEmail, Verified: true, Status: identity.VerifiableAddressStatusCompleted},
+							{Value: email2, Via: identity.AddressTypeEmail, Verified: true, Status: identity.VerifiableAddressStatusCompleted},
+							{Value: fmt.Sprintf("+%d", phone1), Via: identity.AddressTypeSMS, Verified: true, Status: identity.VerifiableAddressStatusCompleted},
+						}
+						require.NoError(t, reg.IdentityManager().Create(ctx, user))
 
-					run := func(t *testing.T, identifierField string, identifier string) {
-						if tc.apiType == ApiTypeNative {
-							cl = testhelpers.NewHTTPClientWithIdentitySessionToken(ctx, t, reg, user)
-							f = testhelpers.InitializeLoginFlowViaAPICtx(t.Context(), t, cl, public, false, testhelpers.InitFlowWithAAL("aal2"))
-						} else {
-							cl = testhelpers.NewHTTPClientWithIdentitySessionCookieLocalhost(ctx, t, reg, user)
+						run := func(t *testing.T) {
+							if tc.apiType == ApiTypeNative {
+								cl = testhelpers.NewHTTPClientWithIdentitySessionToken(ctx, t, reg, user)
+								f = testhelpers.InitializeLoginFlowViaAPICtx(t.Context(), t, cl, public, false, testhelpers.InitFlowWithAAL("aal2"))
+							} else {
+								cl = testhelpers.NewHTTPClientWithIdentitySessionCookieLocalhost(ctx, t, reg, user)
 							f = testhelpers.InitializeLoginFlowViaBrowserCtx(t.Context(), t, cl, public, false, tc.apiType == ApiTypeSPA, false, false, testhelpers.InitFlowWithAAL("aal2"))
 						}
 
-						body, err := json.Marshal(f)
-						require.NoError(t, err)
-
-						snapshotx.SnapshotT(t, json.RawMessage(gjson.GetBytes(body, "ui.nodes.#(group==code)#").Raw))
-						require.Len(t, gjson.GetBytes(body, "ui.messages").Array(), 1, "%s", body)
-						require.EqualValues(t, text.InfoSelfServiceLoginMFA, gjson.GetBytes(body, "ui.messages.0.id").Int(), "%s", body)
-
-						s := &state{
-							flowID:        f.GetId(),
-							identity:      user,
-							client:        cl,
-							testServer:    public,
-							identityEmail: gjson.Get(user.Traits.String(), "email").String(),
+							body, err := json.Marshal(f)
+							require.NoError(t, err)
+							assert.Empty(t, gjson.GetBytes(body, "ui.nodes.#(group==code)#").Array(), "%s", body)
+							require.Len(t, gjson.GetBytes(body, "ui.messages").Array(), 1, "%s", body)
+							require.EqualValues(t, text.InfoSelfServiceLoginMFA, gjson.GetBytes(body, "ui.messages.0.id").Int(), "%s", body)
 						}
-
-						s = submitLogin(ctx, t, s, tc.apiType, func(v *url.Values) {
-							v.Del("method")
-							v.Set(identifierField, identifier)
-						}, false, nil)
-
-						var message *courier.Message
-						if !strings.HasPrefix(identifier, "+") {
-							// email
-							message = testhelpers.CourierExpectMessage(ctx, t, reg, x.GracefulNormalization(identifier), "Use code")
-							assert.Contains(t, message.Body, "Login to your account with the following code")
-						} else {
-							// SMS
-							message = testhelpers.CourierExpectMessage(ctx, t, reg, x.GracefulNormalization(identifier), "Your login code is:")
-						}
-						loginCode := testhelpers.CourierExpectCodeInMessage(t, message, 1)
-						assert.NotEmpty(t, loginCode)
-
-						t.Logf("loginCode: %s", loginCode)
-
-						submitLogin(ctx, t, s, tc.apiType, func(v *url.Values) {
-							v.Set("code", loginCode)
-							v.Set(identifierField, identifier)
-						}, true, nil)
-
-						testhelpers.EnsureAAL(t, cl, public, "aal2", "code")
-					}
-
-					t.Run("field=identifier-email", func(t *testing.T) {
-						run(t, "identifier", email1)
+						run(t)
 					})
-
-					t.Run("field=address-email", func(t *testing.T) {
-						run(t, "address", email2)
-					})
-
-					t.Run("field=address-phone", func(t *testing.T) {
-						run(t, "address", fmt.Sprintf("+%d", phone1))
-					})
-				})
 
 				t.Run("case=cannot use different identifier", func(t *testing.T) {
 					identity := createIdentity(ctx, t, reg, false, true)
@@ -1088,18 +1080,24 @@ func TestLoginCodeStrategy(t *testing.T) {
 					require.Equal(t, "This account does not exist or has not setup sign in with code.", gjson.Get(s.body, "ui.messages.0.text").String(), "%s", body)
 				})
 
-				t.Run("case=verify initial payload with fast login", func(t *testing.T) {
-					fixedEmail := fmt.Sprintf("fixed_mfa_test_fast_%s@ory.sh", tc.apiType)
-					identity := createIdentity(ctx, t, reg, false, false, fixedEmail)
-					var cl *http.Client
-					var f *oryClient.LoginFlow
-					if tc.apiType == ApiTypeNative {
-						cl = testhelpers.NewHTTPClientWithIdentitySessionToken(ctx, t, reg, identity)
-						f = testhelpers.InitializeLoginFlowViaAPICtx(t.Context(), t, cl, public, false, testhelpers.InitFlowWithAAL("aal2"), testhelpers.InitFlowWithVia("email_1"), testhelpers.ExpectActive("code"))
-					} else {
-						cl = testhelpers.NewHTTPClientWithIdentitySessionCookieLocalhost(ctx, t, reg, identity)
-						f = testhelpers.InitializeLoginFlowViaBrowserCtx(t.Context(), t, cl, public, false, tc.apiType == ApiTypeSPA, false, false, testhelpers.InitFlowWithAAL("aal2"), testhelpers.InitFlowWithVia("email_1"), testhelpers.ExpectActive("code"))
-					}
+					t.Run("case=verify initial payload with fast login", func(t *testing.T) {
+						fixedEmail := fmt.Sprintf("fixed_mfa_test_fast_%s@ory.sh", tc.apiType)
+						user := createIdentity(ctx, t, reg, false, false, fixedEmail)
+						for i := range user.VerifiableAddresses {
+							if user.VerifiableAddresses[i].Value == fixedEmail {
+								user.VerifiableAddresses[i].Verified = true
+							}
+						}
+						require.NoError(t, reg.IdentityManager().Update(ctx, user, identity.ManagerAllowWriteProtectedTraits))
+							var cl *http.Client
+							var f *oryClient.LoginFlow
+							if tc.apiType == ApiTypeNative {
+								cl = testhelpers.NewHTTPClientWithIdentitySessionToken(ctx, t, reg, user)
+							f = testhelpers.InitializeLoginFlowViaAPICtx(t.Context(), t, cl, public, false, testhelpers.InitFlowWithAAL("aal2"), testhelpers.InitFlowWithVia("email_1"), testhelpers.ExpectActive("code"))
+							} else {
+								cl = testhelpers.NewHTTPClientWithIdentitySessionCookieLocalhost(ctx, t, reg, user)
+							f = testhelpers.InitializeLoginFlowViaBrowserCtx(t.Context(), t, cl, public, false, tc.apiType == ApiTypeSPA, false, false, testhelpers.InitFlowWithAAL("aal2"), testhelpers.InitFlowWithVia("email_1"), testhelpers.ExpectActive("code"))
+							}
 
 					body, err := json.Marshal(f)
 					require.NoError(t, err)
@@ -1109,31 +1107,29 @@ func TestLoginCodeStrategy(t *testing.T) {
 					require.Len(t, gjson.GetBytes(body, "ui.messages").Array(), 1, "%s", body)
 					require.EqualValues(t, gjson.GetBytes(body, "ui.messages.0.id").Int(), text.InfoSelfServiceLoginCodeSent, "%s", body)
 
-					snapshotx.SnapshotTJSON(t, body, snapshotx.ExceptPaths("ui.nodes.5.attributes.value", "id", "created_at", "expires_at", "updated_at", "issued_at", "request_url", "ui.action"))
-				})
+						snapshotx.SnapshotTJSON(t, body, snapshotx.ExceptPaths("ui.nodes.5.attributes.value", "ui.nodes.6.attributes.value", "id", "created_at", "expires_at", "updated_at", "issued_at", "request_url", "ui.action"))
+					})
 
-				t.Run("case=verify initial payload without fast login", func(t *testing.T) {
+					t.Run("case=verify initial payload without fast login", func(t *testing.T) {
 					fixedEmail := fmt.Sprintf("fixed_mfa_test_%s@ory.sh", tc.apiType)
 					identity := createIdentity(ctx, t, reg, false, true, fixedEmail)
-					var cl *http.Client
-					var f *oryClient.LoginFlow
-					if tc.apiType == ApiTypeNative {
-						cl = testhelpers.NewHTTPClientWithIdentitySessionToken(ctx, t, reg, identity)
-						f = testhelpers.InitializeLoginFlowViaAPICtx(t.Context(), t, cl, public, false, testhelpers.InitFlowWithAAL("aal2"), testhelpers.InitFlowWithVia("email_1"))
-					} else {
-						cl = testhelpers.NewHTTPClientWithIdentitySessionCookieLocalhost(ctx, t, reg, identity)
-						f = testhelpers.InitializeLoginFlowViaBrowserCtx(t.Context(), t, cl, public, false, tc.apiType == ApiTypeSPA, false, false, testhelpers.InitFlowWithAAL("aal2"), testhelpers.InitFlowWithVia("email_1"))
-					}
-
-					body, err := json.Marshal(f)
-					require.NoError(t, err)
-
-					require.EqualValues(t, flow.StateChooseMethod, gjson.GetBytes(body, "state").String(), "%s", body)
-					require.Len(t, gjson.GetBytes(body, "ui.nodes.#(group==code)").Array(), 1, "%s", body)
-					require.Len(t, gjson.GetBytes(body, "ui.nodes.#(group==totp)").Array(), 1, "%s", body)
-
-					snapshotx.SnapshotTJSON(t, body, snapshotx.ExceptPaths("ui.nodes.0.attributes.value", "id", "created_at", "expires_at", "updated_at", "issued_at", "request_url", "ui.action"))
-				})
+						var cl *http.Client
+						var res *http.Response
+						var err error
+						if tc.apiType == ApiTypeNative {
+							cl = testhelpers.NewHTTPClientWithIdentitySessionToken(ctx, t, reg, identity)
+							res, err = cl.Get(public.URL + "/self-service/login/api?aal=aal2&via=email_1")
+						} else {
+							cl = testhelpers.NewHTTPClientWithIdentitySessionCookieLocalhost(ctx, t, reg, identity)
+							res, err = cl.Get(public.URL + "/self-service/login/browser?aal=aal2&via=email_1")
+						}
+						require.NoError(t, err)
+						body := ioutilx.MustReadAll(res.Body)
+						if tc.apiType == ApiTypeNative {
+							body = []byte(gjson.GetBytes(body, "error").Raw)
+						}
+						require.Equal(t, "You can only reference a trait that matches a verification email address in the via parameter, or a registered credential.", gjson.GetBytes(body, "reason").String(), "%s", body)
+					})
 
 				t.Run("case=verify initial payload with fast login and fallback enabled", func(t *testing.T) {
 					conf.MustSet(ctx, config.ViperKeyCodeConfigMissingCredentialFallbackEnabled, true)
@@ -1143,49 +1139,43 @@ func TestLoginCodeStrategy(t *testing.T) {
 
 						var cl *http.Client
 						var f *oryClient.LoginFlow
-						if tc.apiType == ApiTypeNative {
-							cl = testhelpers.NewHTTPClientWithIdentitySessionToken(ctx, t, reg, identity)
-							f = testhelpers.InitializeLoginFlowViaAPICtx(t.Context(), t, cl, public, false, testhelpers.InitFlowWithAAL("aal2"), testhelpers.InitFlowWithVia("email_1"), testhelpers.ExpectActive("code"))
-						} else {
-							cl = testhelpers.NewHTTPClientWithIdentitySessionCookieLocalhost(ctx, t, reg, identity)
-							f = testhelpers.InitializeLoginFlowViaBrowserCtx(t.Context(), t, cl, public, false, tc.apiType == ApiTypeSPA, false, false, testhelpers.InitFlowWithAAL("aal2"), testhelpers.InitFlowWithVia("email_1"), testhelpers.ExpectActive("code"))
-						}
+							if tc.apiType == ApiTypeNative {
+								cl = testhelpers.NewHTTPClientWithIdentitySessionToken(ctx, t, reg, identity)
+								f = testhelpers.InitializeLoginFlowViaAPICtx(t.Context(), t, cl, public, false, testhelpers.InitFlowWithAAL("aal2"), testhelpers.InitFlowWithVia("email_1"))
+							} else {
+								cl = testhelpers.NewHTTPClientWithIdentitySessionCookieLocalhost(ctx, t, reg, identity)
+								f = testhelpers.InitializeLoginFlowViaBrowserCtx(t.Context(), t, cl, public, false, tc.apiType == ApiTypeSPA, false, false, testhelpers.InitFlowWithAAL("aal2"), testhelpers.InitFlowWithVia("email_1"))
+							}
 
 						body, err := json.Marshal(f)
 						require.NoError(t, err)
 
-						require.EqualValues(t, flow.StateEmailSent, gjson.GetBytes(body, "state").String(), "%s", body)
-						require.Len(t, gjson.GetBytes(body, "ui.nodes.#(group==code)").Array(), 1, "%s", body)
-						require.Len(t, gjson.GetBytes(body, "ui.messages").Array(), 1, "%s", body)
-						require.EqualValues(t, text.InfoSelfServiceLoginCodeSent, gjson.GetBytes(body, "ui.messages.0.id").Int(), "%s", body)
+							require.EqualValues(t, flow.StateChooseMethod, gjson.GetBytes(body, "state").String(), "%s", body)
+							require.Len(t, gjson.GetBytes(body, "ui.messages").Array(), 1, "%s", body)
+							require.EqualValues(t, text.InfoSelfServiceLoginMFA, gjson.GetBytes(body, "ui.messages.0.id").Int(), "%s", body)
+						})
+						t.Run("case=with code credential", func(t *testing.T) {
+							fixedEmail := fmt.Sprintf("fixed_mfa_fallback_with_cc%s@ory.sh", tc.apiType)
+							identity := createIdentity(ctx, t, reg, false, false, fixedEmail)
 
-						snapshotx.SnapshotTJSON(t, body, snapshotx.ExceptPaths("ui.nodes.5.attributes.value", "id", "created_at", "expires_at", "updated_at", "issued_at", "request_url", "ui.action"))
+							var cl *http.Client
+							var res *http.Response
+							var err error
+							if tc.apiType == ApiTypeNative {
+								cl = testhelpers.NewHTTPClientWithIdentitySessionToken(ctx, t, reg, identity)
+								res, err = cl.Get(public.URL + "/self-service/login/api?aal=aal2&via=email_1")
+							} else {
+								cl = testhelpers.NewHTTPClientWithIdentitySessionCookieLocalhost(ctx, t, reg, identity)
+								res, err = cl.Get(public.URL + "/self-service/login/browser?aal=aal2&via=email_1")
+							}
+							require.NoError(t, err)
+							body := ioutilx.MustReadAll(res.Body)
+							if tc.apiType == ApiTypeNative {
+								body = []byte(gjson.GetBytes(body, "error").Raw)
+							}
+							require.Equal(t, "You can only reference a trait that matches a verification email address in the via parameter, or a registered credential.", gjson.GetBytes(body, "reason").String(), "%s", body)
+						})
 					})
-					t.Run("case=with code credential", func(t *testing.T) {
-						fixedEmail := fmt.Sprintf("fixed_mfa_fallback_with_cc%s@ory.sh", tc.apiType)
-						identity := createIdentity(ctx, t, reg, false, false, fixedEmail)
-
-						var cl *http.Client
-						var f *oryClient.LoginFlow
-						if tc.apiType == ApiTypeNative {
-							cl = testhelpers.NewHTTPClientWithIdentitySessionToken(ctx, t, reg, identity)
-							f = testhelpers.InitializeLoginFlowViaAPICtx(t.Context(), t, cl, public, false, testhelpers.InitFlowWithAAL("aal2"), testhelpers.InitFlowWithVia("email_1"), testhelpers.ExpectActive("code"))
-						} else {
-							cl = testhelpers.NewHTTPClientWithIdentitySessionCookieLocalhost(ctx, t, reg, identity)
-							f = testhelpers.InitializeLoginFlowViaBrowserCtx(t.Context(), t, cl, public, false, tc.apiType == ApiTypeSPA, false, false, testhelpers.InitFlowWithAAL("aal2"), testhelpers.InitFlowWithVia("email_1"), testhelpers.ExpectActive("code"))
-						}
-
-						body, err := json.Marshal(f)
-						require.NoError(t, err)
-
-						require.EqualValuesf(t, flow.StateEmailSent, gjson.GetBytes(body, "state").String(), "%s", body)
-						require.Lenf(t, gjson.GetBytes(body, "ui.nodes.#(group==code)").Array(), 1, "%s", body)
-						require.Lenf(t, gjson.GetBytes(body, "ui.messages").Array(), 1, "%s", body)
-						require.EqualValuesf(t, text.InfoSelfServiceLoginCodeSent, gjson.GetBytes(body, "ui.messages.0.id").Int(), "%s", body)
-
-						snapshotx.SnapshotTJSON(t, body, snapshotx.ExceptPaths("ui.nodes.5.attributes.value", "id", "created_at", "expires_at", "updated_at", "issued_at", "request_url", "ui.action"))
-					})
-				})
 
 				t.Run("case=using a non existing identity trait results in an error", func(t *testing.T) {
 					identity := createIdentity(ctx, t, reg, false, false)

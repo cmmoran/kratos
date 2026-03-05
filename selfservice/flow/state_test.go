@@ -11,10 +11,16 @@ import (
 
 func TestState(t *testing.T) {
 	assert.EqualValues(t, StateEmailSent, NextState(StateChooseMethod))
-	assert.EqualValues(t, StatePassedChallenge, NextState(StateEmailSent))
+	assert.EqualValues(t, StateEmailSent, NextState(StateChooseMethod, "email"))
+	assert.EqualValues(t, StateSmsSent, NextState(StateChooseMethod, "sms"))
+	assert.EqualValues(t, StateSmsSent, NextState(StateEmailSent))
+	assert.EqualValues(t, StatePassedChallenge, NextState(StateSmsSent))
 	assert.EqualValues(t, StatePassedChallenge, NextState(StatePassedChallenge))
 
 	assert.True(t, HasReachedState(StatePassedChallenge, StatePassedChallenge))
 	assert.False(t, HasReachedState(StatePassedChallenge, StateEmailSent))
+	assert.False(t, HasReachedState(StatePassedChallenge, StateSmsSent))
+	assert.True(t, HasReachedState(StateEmailSent, StateSmsSent))
 	assert.False(t, HasReachedState(StateEmailSent, StateChooseMethod))
+	assert.False(t, HasReachedState(StateSmsSent, StateChooseMethod))
 }

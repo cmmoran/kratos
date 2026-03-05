@@ -37,6 +37,7 @@ var tagsIgnoredForHashing = map[string]struct{}{
 	"id":         {},
 	"created_at": {},
 	"updated_at": {},
+	"-":          {},
 	// "verified_at": {}, // we explicitly want to be able to update just this field and nothing else
 }
 

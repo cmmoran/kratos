@@ -154,5 +154,25 @@
         "type": "info"
       }
     }
+  },
+  {
+    "type": "input",
+    "group": "code",
+    "attributes": {
+      "name": "code_enable",
+      "type": "submit",
+      "value": "true",
+      "required": true,
+      "disabled": false,
+      "node_type": "input"
+    },
+    "messages": [],
+    "meta": {
+      "label": {
+        "id": 91050000,
+        "text": "Enable this method",
+        "type": "info"
+      }
+    }
   }
 ]

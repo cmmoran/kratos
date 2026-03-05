@@ -202,7 +202,7 @@ func TestVerification(t *testing.T) {
 		check := func(t *testing.T, actual string) {
 			assert.EqualValues(t, string(node.CodeGroup), gjson.Get(actual, "active").String(), "%s", actual)
 			assert.EqualValues(t, email, gjson.Get(actual, "ui.nodes.#(attributes.name==email).attributes.value").String(), "%s", actual)
-			assertx.EqualAsJSON(t, text.NewVerificationEmailWithCodeSent(), json.RawMessage(gjson.Get(actual, "ui.messages.0").Raw))
+			assertx.EqualAsJSON(t, text.NewVerificationCodeSent(identity.AddressTypeEmail, string(verification.VerificationStrategyCode)), json.RawMessage(gjson.Get(actual, "ui.messages.0").Raw))
 
 			message := testhelpers.CourierExpectMessage(ctx, t, reg, email, "Someone tried to verify this email address")
 			assert.Contains(t, message.Body, "If this was you, check if you signed up using a different address.")
@@ -310,7 +310,7 @@ func TestVerification(t *testing.T) {
 		check := func(t *testing.T, actual string) {
 			assert.EqualValues(t, string(node.CodeGroup), gjson.Get(actual, "active").String(), "%s", actual)
 			assert.EqualValues(t, verificationEmail, gjson.Get(actual, "ui.nodes.#(attributes.name==email).attributes.value").String(), "%s", actual)
-			assertx.EqualAsJSON(t, text.NewVerificationEmailWithCodeSent(), json.RawMessage(gjson.Get(actual, "ui.messages.0").Raw))
+			assertx.EqualAsJSON(t, text.NewVerificationCodeSent(identity.AddressTypeEmail, string(verification.VerificationStrategyCode)), json.RawMessage(gjson.Get(actual, "ui.messages.0").Raw))
 
 			message := testhelpers.CourierExpectMessage(ctx, t, reg, verificationEmail, "Use code")
 			assert.Contains(t, message.Body, "Verify your account with the following code")
@@ -334,7 +334,7 @@ func TestVerification(t *testing.T) {
 
 			assert.Equal(t, http.StatusOK, res.StatusCode)
 			assert.EqualValues(t, "passed_challenge", gjson.Get(body, "state").String())
-			assert.EqualValues(t, text.NewInfoSelfServiceVerificationSuccessful().Text, gjson.Get(body, "ui.messages.0.text").String())
+			assert.EqualValues(t, "You successfully verified your address.", gjson.Get(body, "ui.messages.0.text").String())
 
 			id, err := reg.PrivilegedIdentityPool().GetIdentityConfidential(context.Background(), identityToVerify.ID)
 			require.NoError(t, err)
@@ -549,7 +549,7 @@ func TestVerification(t *testing.T) {
 
 		body, res = submitVerificationCode(t, body, c, secondCode)
 		assert.Equal(t, http.StatusOK, res.StatusCode)
-		testhelpers.AssertMessage(t, body, "You successfully verified your email address.")
+		testhelpers.AssertMessage(t, body, "You successfully verified your address.")
 	})
 
 	t.Run("description=should not be able to use an invalid code more than 5 times", func(t *testing.T) {
@@ -594,7 +594,7 @@ func TestVerification(t *testing.T) {
 
 		body, res := submitVerificationCode(t, body, c, code)
 		assert.Equal(t, http.StatusOK, res.StatusCode)
-		testhelpers.AssertMessage(t, body, "You successfully verified your email address.")
+		testhelpers.AssertMessage(t, body, "You successfully verified your address.")
 
 		body = expectSuccess(t, nil, true, false, func(v url.Values) {
 			v.Set("email", verificationEmail)
@@ -604,7 +604,7 @@ func TestVerification(t *testing.T) {
 
 		body, res = submitVerificationCode(t, body, c, code)
 		assert.Equal(t, http.StatusOK, res.StatusCode)
-		testhelpers.AssertMessage(t, body, "You successfully verified your email address.")
+		testhelpers.AssertMessage(t, body, "You successfully verified your address.")
 	})
 
 	t.Run("case=respects return_to URI parameter", func(t *testing.T) {

@@ -179,7 +179,7 @@ func TestVerification(t *testing.T) {
 		check := func(t *testing.T, actual string) {
 			assert.EqualValues(t, string(node.LinkGroup), gjson.Get(actual, "active").String(), "%s", actual)
 			assert.EqualValues(t, email, gjson.Get(actual, "ui.nodes.#(attributes.name==email).attributes.value").String(), "%s", actual)
-			assertx.EqualAsJSON(t, text.NewVerificationEmailSent(), json.RawMessage(gjson.Get(actual, "ui.messages.0").Raw))
+			assertx.EqualAsJSON(t, text.NewVerificationCodeSent(identity.AddressTypeEmail, string(verification.VerificationStrategyLink)), json.RawMessage(gjson.Get(actual, "ui.messages.0").Raw))
 
 			message := testhelpers.CourierExpectMessage(ctx, t, reg, email, "Someone tried to verify this email address")
 			assert.Contains(t, message.Body, "If this was you, check if you signed up using a different address.")
@@ -282,7 +282,7 @@ func TestVerification(t *testing.T) {
 		check := func(t *testing.T, actual string) {
 			assert.EqualValues(t, string(node.LinkGroup), gjson.Get(actual, "active").String(), "%s", actual)
 			assert.EqualValues(t, verificationEmail, gjson.Get(actual, "ui.nodes.#(attributes.name==email).attributes.value").String(), "%s", actual)
-			assertx.EqualAsJSON(t, text.NewVerificationEmailSent(), json.RawMessage(gjson.Get(actual, "ui.messages.0").Raw))
+			assertx.EqualAsJSON(t, text.NewVerificationCodeSent(identity.AddressTypeEmail, string(verification.VerificationStrategyLink)), json.RawMessage(gjson.Get(actual, "ui.messages.0").Raw))
 
 			message := testhelpers.CourierExpectMessage(ctx, t, reg, verificationEmail, "Please verify your email address")
 			assert.Contains(t, message.Body, "Verify your account by opening the following link")
@@ -301,7 +301,7 @@ func TestVerification(t *testing.T) {
 			assert.Contains(t, res.Request.URL.String(), conf.SelfServiceFlowVerificationUI(ctx).String())
 			body := string(ioutilx.MustReadAll(res.Body))
 			assert.EqualValues(t, "passed_challenge", gjson.Get(body, "state").String())
-			assert.EqualValues(t, text.NewInfoSelfServiceVerificationSuccessful().Text, gjson.Get(body, "ui.messages.0.text").String())
+			assert.EqualValues(t, text.NewInfoSelfServiceVerificationSuccessful(identity.AddressTypeEmail).Text, gjson.Get(body, "ui.messages.0.text").String())
 
 			id, err := reg.PrivilegedIdentityPool().GetIdentityConfidential(context.Background(), identityToVerify.ID)
 			require.NoError(t, err)

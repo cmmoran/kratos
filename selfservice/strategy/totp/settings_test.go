@@ -40,6 +40,7 @@ func TestCompleteSettings(t *testing.T) {
 
 	conf, reg := pkg.NewFastRegistryWithMocks(t,
 		configx.WithValues(testhelpers.MethodEnableConfig(identity.CredentialsTypePassword, false)),
+		configx.WithValues(testhelpers.MethodEnableConfig(identity.CredentialsTypeCodeAuth, false)),
 		configx.WithValues(testhelpers.MethodEnableConfig("profile", false)),
 		configx.WithValues(testhelpers.MethodEnableConfig(identity.CredentialsTypeTOTP, true)),
 		configx.WithValues(testhelpers.DefaultIdentitySchemaConfig("file://./stub/settings.schema.json")),
@@ -137,7 +138,7 @@ func TestCompleteSettings(t *testing.T) {
 		})
 	})
 
-	t.Run("type=can not unlink without privileged session", func(t *testing.T) {
+		t.Run("type=can not unlink without privileged session", func(t *testing.T) {
 		conf.MustSet(t.Context(), config.ViperKeySelfServiceSettingsPrivilegedAuthenticationAfter, "1ns")
 		t.Cleanup(func() {
 			conf.MustSet(t.Context(), config.ViperKeySelfServiceSettingsPrivilegedAuthenticationAfter, "5m")
@@ -154,30 +155,32 @@ func TestCompleteSettings(t *testing.T) {
 			assert.Equal(t, key.URL(), gjson.GetBytes(cred.Config, "totp_url").String())
 		}
 
-		t.Run("type=api", func(t *testing.T) {
-			actual, res := doAPIFlow(t, payload, id)
-			assert.Equal(t, http.StatusForbidden, res.StatusCode)
-			assert.Contains(t, gjson.Get(actual, "redirect_browser_to").String(), publicTS.URL+"/self-service/login/browser?refresh=true&return_to=")
-			assertx.EqualAsJSONExcept(t, settings.NewFlowNeedsReAuth(), json.RawMessage(actual), []string{"redirect_browser_to"})
-			checkIdentity(t)
-		})
+			t.Run("type=api", func(t *testing.T) {
+				actual, res := doAPIFlow(t, payload, id)
+				assert.Equal(t, http.StatusForbidden, res.StatusCode)
+				assert.Contains(t, gjson.Get(actual, "redirect_browser_to").String(), publicTS.URL+"/self-service/login/browser?")
+				assert.Contains(t, gjson.Get(actual, "redirect_browser_to").String(), "refresh=true&return_to=")
+				assertx.EqualAsJSONExcept(t, settings.NewFlowNeedsReAuth(), json.RawMessage(actual), []string{"redirect_browser_to"})
+				checkIdentity(t)
+			})
 
-		t.Run("type=spa", func(t *testing.T) {
-			actual, res := doBrowserFlow(t, true, payload, id)
-			assert.Equal(t, http.StatusForbidden, res.StatusCode)
-			assert.Contains(t, gjson.Get(actual, "redirect_browser_to").String(), publicTS.URL+"/self-service/login/browser?refresh=true&return_to=")
-			assertx.EqualAsJSONExcept(t, settings.NewFlowNeedsReAuth(), json.RawMessage(actual), []string{"redirect_browser_to"})
-			checkIdentity(t)
-		})
+			t.Run("type=spa", func(t *testing.T) {
+				actual, res := doBrowserFlow(t, true, payload, id)
+				assert.Equal(t, http.StatusForbidden, res.StatusCode)
+				assert.Contains(t, gjson.Get(actual, "redirect_browser_to").String(), publicTS.URL+"/self-service/login/browser?")
+				assert.Contains(t, gjson.Get(actual, "redirect_browser_to").String(), "refresh=true&return_to=")
+				assertx.EqualAsJSONExcept(t, settings.NewFlowNeedsReAuth(), json.RawMessage(actual), []string{"redirect_browser_to"})
+				checkIdentity(t)
+			})
 
-		t.Run("type=browser", func(t *testing.T) {
-			actual, res := doBrowserFlow(t, false, payload, id)
-			assert.Equal(t, http.StatusOK, res.StatusCode)
-			assert.Contains(t, res.Request.URL.String(), loginTS.URL+"/login-ts")
-			assertx.EqualAsJSON(t, text.NewInfoLoginReAuth().Text, json.RawMessage(gjson.Get(actual, "ui.messages.0.text").Raw), actual)
-			checkIdentity(t)
+			t.Run("type=browser", func(t *testing.T) {
+				actual, res := doBrowserFlow(t, false, payload, id)
+				assert.Equal(t, http.StatusOK, res.StatusCode)
+				assert.Contains(t, res.Request.URL.String(), loginTS.URL+"/login-ts")
+				assert.Contains(t, []string{text.NewInfoLoginReAuth().Text, text.NewInfoLoginMFA().Text}, gjson.Get(actual, "ui.messages.0.text").String(), actual)
+				checkIdentity(t)
+			})
 		})
-	})
 
 	t.Run("type=can not set up new totp device without privileged session", func(t *testing.T) {
 		conf.MustSet(t.Context(), config.ViperKeySelfServiceSettingsPrivilegedAuthenticationAfter, "1ns")
@@ -195,21 +198,23 @@ func TestCompleteSettings(t *testing.T) {
 			require.ErrorIs(t, err, sqlcon.ErrNoRows)
 		}
 
-		t.Run("type=api", func(t *testing.T) {
-			actual, res := doAPIFlow(t, payload, id)
-			assert.Equal(t, http.StatusForbidden, res.StatusCode)
-			assert.Contains(t, gjson.Get(actual, "redirect_browser_to").String(), publicTS.URL+"/self-service/login/browser?refresh=true&return_to=")
-			assertx.EqualAsJSONExcept(t, settings.NewFlowNeedsReAuth(), json.RawMessage(actual), []string{"redirect_browser_to"})
-			checkIdentity(t)
-		})
+			t.Run("type=api", func(t *testing.T) {
+				actual, res := doAPIFlow(t, payload, id)
+				assert.Equal(t, http.StatusForbidden, res.StatusCode)
+				assert.Contains(t, gjson.Get(actual, "redirect_browser_to").String(), publicTS.URL+"/self-service/login/browser?")
+				assert.Contains(t, gjson.Get(actual, "redirect_browser_to").String(), "refresh=true&return_to=")
+				assertx.EqualAsJSONExcept(t, settings.NewFlowNeedsReAuth(), json.RawMessage(actual), []string{"redirect_browser_to"})
+				checkIdentity(t)
+			})
 
-		t.Run("type=spa", func(t *testing.T) {
-			actual, res := doBrowserFlow(t, true, payload, id)
-			assert.Equal(t, http.StatusForbidden, res.StatusCode)
-			assert.Contains(t, gjson.Get(actual, "redirect_browser_to").String(), publicTS.URL+"/self-service/login/browser?refresh=true&return_to=")
-			assertx.EqualAsJSONExcept(t, settings.NewFlowNeedsReAuth(), json.RawMessage(actual), []string{"redirect_browser_to"})
-			checkIdentity(t)
-		})
+			t.Run("type=spa", func(t *testing.T) {
+				actual, res := doBrowserFlow(t, true, payload, id)
+				assert.Equal(t, http.StatusForbidden, res.StatusCode)
+				assert.Contains(t, gjson.Get(actual, "redirect_browser_to").String(), publicTS.URL+"/self-service/login/browser?")
+				assert.Contains(t, gjson.Get(actual, "redirect_browser_to").String(), "refresh=true&return_to=")
+				assertx.EqualAsJSONExcept(t, settings.NewFlowNeedsReAuth(), json.RawMessage(actual), []string{"redirect_browser_to"})
+				checkIdentity(t)
+			})
 
 		t.Run("type=browser", func(t *testing.T) {
 			actual, res := doBrowserFlow(t, false, payload, id)
@@ -263,15 +268,17 @@ func TestCompleteSettings(t *testing.T) {
 		})
 	})
 
-	t.Run("type=set up TOTP device but code is incorrect", func(t *testing.T) {
+		t.Run("type=set up TOTP device but code is incorrect", func(t *testing.T) {
 		payload := func(v url.Values) {
 			v.Set(node.TOTPCode, "111111")
 		}
 
-		checkIdentity := func(t *testing.T, id *identity.Identity) {
-			_, _, err := reg.PrivilegedIdentityPool().FindByCredentialsIdentifier(t.Context(), identity.CredentialsTypeTOTP, id.ID.String())
-			require.ErrorIs(t, err, sqlcon.ErrNoRows)
-		}
+			checkIdentity := func(t *testing.T, id *identity.Identity) {
+				actual, err := reg.PrivilegedIdentityPool().GetIdentityConfidential(t.Context(), id.ID)
+				require.NoError(t, err)
+				_, ok := actual.GetCredentials(identity.CredentialsTypeTOTP)
+				assert.False(t, ok)
+			}
 
 		t.Run("type=api", func(t *testing.T) {
 			id := createIdentityWithoutTOTP(t.Context(), t, reg)
@@ -301,16 +308,18 @@ func TestCompleteSettings(t *testing.T) {
 		})
 	})
 
-	t.Run("type=set up TOTP device", func(t *testing.T) {
-		checkIdentity := func(t *testing.T, id *identity.Identity, key string) {
-			i, cred, err := reg.PrivilegedIdentityPool().FindByCredentialsIdentifier(t.Context(), identity.CredentialsTypeTOTP, id.ID.String())
-			require.NoError(t, err)
-			var c identity.CredentialsTOTPConfig
-			require.NoError(t, json.Unmarshal(cred.Config, &c))
-			actual, err := otp.NewKeyFromURL(c.TOTPURL)
-			require.NoError(t, err)
-			assert.Equal(t, key, actual.Secret())
-			assert.Contains(t, c.TOTPURL, gjson.GetBytes(i.Traits, "subject").String())
+		t.Run("type=set up TOTP device", func(t *testing.T) {
+			checkIdentity := func(t *testing.T, id *identity.Identity, key string) {
+				i, err := reg.PrivilegedIdentityPool().GetIdentityConfidential(t.Context(), id.ID)
+				require.NoError(t, err)
+				cred, ok := i.GetCredentials(identity.CredentialsTypeTOTP)
+				require.True(t, ok)
+				var c identity.CredentialsTOTPConfig
+				require.NoError(t, json.Unmarshal(cred.Config, &c))
+				actual, err := otp.NewKeyFromURL(c.TOTPURL)
+				require.NoError(t, err)
+				assert.Equal(t, key, actual.Secret())
+				assert.Contains(t, c.TOTPURL, gjson.GetBytes(i.Traits, "subject").String())
 		}
 
 		run := func(t *testing.T, isAPI, isSPA bool, id *identity.Identity, hc *http.Client, f *kratos.SettingsFlow) {
@@ -339,9 +348,9 @@ func TestCompleteSettings(t *testing.T) {
 				assert.EqualValues(t, flow.StateSuccess, gjson.Get(actual, "state").String(), actual)
 			}
 
-			actualFlow, err := reg.SettingsFlowPersister().GetSettingsFlow(t.Context(), uuid.FromStringOrNil(f.Id))
-			require.NoError(t, err)
-			assert.Empty(t, gjson.GetBytes(actualFlow.InternalContext, flow.PrefixInternalContextKey(identity.CredentialsTypeTOTP, totp.InternalContextKeyURL)))
+				actualFlow, err := reg.SettingsFlowPersister().GetSettingsFlow(t.Context(), uuid.FromStringOrNil(f.Id))
+				require.NoError(t, err)
+				assert.Empty(t, gjson.GetBytes(actualFlow.InternalContext, flow.PrefixInternalContextKey(identity.CredentialsTypeTOTP, totp.InternalContextKeyURL)))
 
 			checkIdentity(t, id, key)
 			testhelpers.EnsureAAL(t, hc, publicTS, "aal2", string(identity.CredentialsTypeTOTP))

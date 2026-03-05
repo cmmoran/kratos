@@ -3,19 +3,6 @@
     "type": "input",
     "group": "code",
     "attributes": {
-      "name": "method",
-      "type": "hidden",
-      "value": "code",
-      "disabled": false,
-      "node_type": "input"
-    },
-    "messages": [],
-    "meta": {}
-  },
-  {
-    "type": "input",
-    "group": "code",
-    "attributes": {
       "name": "code",
       "type": "text",
       "required": true,
@@ -30,6 +17,19 @@
         "type": "info"
       }
     }
+  },
+  {
+    "type": "input",
+    "group": "code",
+    "attributes": {
+      "name": "method",
+      "type": "hidden",
+      "value": "code",
+      "disabled": false,
+      "node_type": "input"
+    },
+    "messages": [],
+    "meta": {}
   },
   {
     "type": "input",

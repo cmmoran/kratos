@@ -622,8 +622,8 @@ func TestFlowLifecycle(t *testing.T) {
 			t.Run("case=can request refresh and aal at the same time on authenticated request", func(t *testing.T) {
 				res, body := initAuthenticatedFlow(t, url.Values{"refresh": {"true"}, "aal": {"aal2"}}, true)
 				assert.Contains(t, res.Request.URL.String(), login.RouteInitAPIFlow)
-				assertx.EqualAsJSON(t, "Please confirm this action by verifying that it is you.", gjson.GetBytes(body, "ui.messages.0.text").String(), "%s", body)
-				assertx.EqualAsJSON(t, "Please complete the second authentication challenge.", gjson.GetBytes(body, "ui.messages.1.text").String(), "%s", body)
+				assertx.EqualAsJSON(t, "Please complete the second authentication challenge.", gjson.GetBytes(body, "ui.messages.0.text").String(), "%s", body)
+				assert.Empty(t, gjson.GetBytes(body, "ui.messages.1.text").String(), "%s", body)
 			})
 
 			t.Run("case=can not request aal2 on unauthenticated request", func(t *testing.T) {
@@ -704,8 +704,8 @@ func TestFlowLifecycle(t *testing.T) {
 			t.Run("case=can request refresh and aal at the same time on authenticated request", func(t *testing.T) {
 				res, body := initAuthenticatedFlow(t, url.Values{"refresh": {"true"}, "aal": {"aal2"}}, false)
 				assert.Contains(t, res.Request.URL.String(), loginTS.URL)
-				assertx.EqualAsJSON(t, "Please confirm this action by verifying that it is you.", gjson.GetBytes(body, "ui.messages.0.text").String(), "%s", body)
-				assertx.EqualAsJSON(t, "Please complete the second authentication challenge.", gjson.GetBytes(body, "ui.messages.1.text").String(), "%s", body)
+				assertx.EqualAsJSON(t, "Please complete the second authentication challenge.", gjson.GetBytes(body, "ui.messages.0.text").String(), "%s", body)
+				assert.Empty(t, gjson.GetBytes(body, "ui.messages.1.text").String(), "%s", body)
 			})
 
 			t.Run("case=redirects if aal2 is requested and set up already without refresh", func(t *testing.T) {
