@@ -81,6 +81,13 @@ func servePublic(ctx context.Context, r *driver.RegistryDefault, cmd *cobra.Comm
 	n.Use(x.HTTPLoaderContextMiddleware(r))
 	n.UseFunc(httprouterx.NoCacheNegroni)
 	n.Use(sqa(ctx, cmd, r))
+	n.UseFunc(func(w http.ResponseWriter, req *http.Request, next http.HandlerFunc) {
+		if dev := session.CurrentDeviceForRequest(req); dev != nil && dev.Fingerprint != nil {
+			l.WithRequest(req).WithField("device", dev.Fingerprint).Trace("admin: set device to context")
+		}
+
+		next(w, req)
+	})
 
 	csrf := nosurfx.NewCSRFHandler(router, r)
 
