@@ -1200,43 +1200,40 @@ func TestLoginCodeStrategy(t *testing.T) {
 						require.Equal(t, "You can only reference a trait that matches a verification email address in the via parameter, or a registered credential.", gjson.GetBytes(body, "reason").String(), "%s", body)
 					})
 
-					t.Run("case=verify initial payload with fast login and fallback enabled", func(t *testing.T) {
+					t.Run("case=verify initial payload with fallback enabled", func(t *testing.T) {
 						conf.MustSet(ctx, config.ViperKeyCodeConfigMissingCredentialFallbackEnabled, true)
-						t.Run("case=no code credential", func(t *testing.T) {
-							fixedEmail := fmt.Sprintf("fixed_mfa_fallback_without_cc%s@ory.sh", tc.apiType)
-							identity := createIdentity(ctx, t, reg, true, false, fixedEmail)
+						t.Run("case=no code credential stays in choose method when schema declares code", func(t *testing.T) {
+							identity := createIdentity(ctx, t, reg, true, false)
 
 							var cl *http.Client
 							var f *oryClient.LoginFlow
 							if tc.apiType == ApiTypeNative {
 								cl = testhelpers.NewHTTPClientWithIdentitySessionToken(ctx, t, reg, identity)
-								f = testhelpers.InitializeLoginFlowViaAPICtx(t.Context(), t, cl, public, false, testhelpers.InitFlowWithAAL("aal2"), testhelpers.InitFlowWithVia("email_1"))
+								f = testhelpers.InitializeLoginFlowViaAPICtx(t.Context(), t, cl, public, false, testhelpers.InitFlowWithAAL("aal2"), testhelpers.InitFlowWithVia("email"))
 							} else {
 								cl = testhelpers.NewHTTPClientWithIdentitySessionCookieLocalhost(ctx, t, reg, identity)
-								f = testhelpers.InitializeLoginFlowViaBrowserCtx(t.Context(), t, cl, public, false, tc.apiType == ApiTypeSPA, false, false, testhelpers.InitFlowWithAAL("aal2"), testhelpers.InitFlowWithVia("email_1"))
+								f = testhelpers.InitializeLoginFlowViaBrowserCtx(t.Context(), t, cl, public, false, tc.apiType == ApiTypeSPA, false, false, testhelpers.InitFlowWithAAL("aal2"), testhelpers.InitFlowWithVia("email"))
 							}
 
 							body, err := json.Marshal(f)
 							require.NoError(t, err)
 
-							require.EqualValues(t, flow.StateEmailSent, gjson.GetBytes(body, "state").String(), "%s", body)
-							require.Len(t, gjson.GetBytes(body, "ui.nodes.#(group==code)").Array(), 1, "%s", body)
+							require.EqualValues(t, flow.StateChooseMethod, gjson.GetBytes(body, "state").String(), "%s", body)
 							require.Len(t, gjson.GetBytes(body, "ui.messages").Array(), 1, "%s", body)
-							require.EqualValues(t, text.InfoSelfServiceLoginCodeSentForAuthenticatedUser, gjson.GetBytes(body, "ui.messages.0.id").Int(), "%s", body)
+							require.EqualValues(t, text.InfoSelfServiceLoginMFA, gjson.GetBytes(body, "ui.messages.0.id").Int(), "%s", body)
 						})
 					})
 					t.Run("case=with code credential", func(t *testing.T) {
-						fixedEmail := fmt.Sprintf("fixed_mfa_fallback_with_cc%s@ory.sh", tc.apiType)
-						identity := createIdentity(ctx, t, reg, false, false, fixedEmail)
+						identity := createIdentity(ctx, t, reg, false, false)
 
 						var cl *http.Client
 						var f *oryClient.LoginFlow
 						if tc.apiType == ApiTypeNative {
 							cl = testhelpers.NewHTTPClientWithIdentitySessionToken(ctx, t, reg, identity)
-							f = testhelpers.InitializeLoginFlowViaAPICtx(t.Context(), t, cl, public, false, testhelpers.InitFlowWithAAL("aal2"), testhelpers.InitFlowWithVia("email_1"), testhelpers.ExpectActive("code"))
+							f = testhelpers.InitializeLoginFlowViaAPICtx(t.Context(), t, cl, public, false, testhelpers.InitFlowWithAAL("aal2"), testhelpers.InitFlowWithVia("email"), testhelpers.ExpectActive("code"))
 						} else {
 							cl = testhelpers.NewHTTPClientWithIdentitySessionCookieLocalhost(ctx, t, reg, identity)
-							f = testhelpers.InitializeLoginFlowViaBrowserCtx(t.Context(), t, cl, public, false, tc.apiType == ApiTypeSPA, false, false, testhelpers.InitFlowWithAAL("aal2"), testhelpers.InitFlowWithVia("email_1"), testhelpers.ExpectActive("code"))
+							f = testhelpers.InitializeLoginFlowViaBrowserCtx(t.Context(), t, cl, public, false, tc.apiType == ApiTypeSPA, false, false, testhelpers.InitFlowWithAAL("aal2"), testhelpers.InitFlowWithVia("email"), testhelpers.ExpectActive("code"))
 						}
 
 						body, err := json.Marshal(f)
@@ -1246,12 +1243,10 @@ func TestLoginCodeStrategy(t *testing.T) {
 						require.Lenf(t, gjson.GetBytes(body, "ui.nodes.#(group==code)").Array(), 1, "%s", body)
 						require.Lenf(t, gjson.GetBytes(body, "ui.messages").Array(), 1, "%s", body)
 						require.EqualValuesf(t, text.InfoSelfServiceLoginCodeSentForAuthenticatedUser, gjson.GetBytes(body, "ui.messages.0.id").Int(), "%s", body)
-
-						snapshotx.SnapshotTJSON(t, body, snapshotx.ExceptPaths("ui.nodes.5.attributes.value", "id", "created_at", "expires_at", "updated_at", "issued_at", "request_url", "ui.action"))
 					})
 				})
 
-				t.Run("case=using a non existing identity trait results in an error", func(t *testing.T) {
+				t.Run("case=using a non existing identity trait stays in choose method", func(t *testing.T) {
 					identity := createIdentity(ctx, t, reg, false, false)
 					var cl *http.Client
 					var res *http.Response
@@ -1266,13 +1261,11 @@ func TestLoginCodeStrategy(t *testing.T) {
 					require.NoError(t, err)
 
 					body := ioutilx.MustReadAll(res.Body)
-					if tc.apiType == ApiTypeNative {
-						body = []byte(gjson.GetBytes(body, "error").Raw)
-					}
-					require.Equal(t, "No value found for trait doesnt_exist in the current identity.", gjson.GetBytes(body, "reason").String(), "%s", body)
+					require.EqualValues(t, flow.StateChooseMethod, gjson.GetBytes(body, "state").String(), "%s", body)
+					require.EqualValues(t, text.InfoSelfServiceLoginMFA, gjson.GetBytes(body, "ui.messages.0.id").Int(), "%s", body)
 				})
 
-				t.Run("case=unset trait in identity should lead to an error", func(t *testing.T) {
+				t.Run("case=unset trait in identity stays in choose method", func(t *testing.T) {
 					identity := createIdentity(ctx, t, reg, false, false)
 					var cl *http.Client
 					var res *http.Response
@@ -1287,10 +1280,8 @@ func TestLoginCodeStrategy(t *testing.T) {
 					require.NoError(t, err)
 
 					body := ioutilx.MustReadAll(res.Body)
-					if tc.apiType == ApiTypeNative {
-						body = []byte(gjson.GetBytes(body, "error").Raw)
-					}
-					require.Equal(t, "No value found for trait email_1 in the current identity.", gjson.GetBytes(body, "reason").String(), "%s", body)
+					require.EqualValues(t, flow.StateChooseMethod, gjson.GetBytes(body, "state").String(), "%s", body)
+					require.EqualValues(t, text.InfoSelfServiceLoginMFA, gjson.GetBytes(body, "ui.messages.0.id").Int(), "%s", body)
 				})
 			})
 		})
