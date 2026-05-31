@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/ory/herodot"
+	"github.com/ory/kratos/continuity"
 	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/selfservice/flow"
 	"github.com/ory/kratos/selfservice/flow/settings"
@@ -238,15 +239,27 @@ func (s *Strategy) continueSettingsFlowEnable(ctx context.Context, ctxUpdate *se
 
 		var conf identity.CredentialsCode
 		if err = json.Unmarshal(creds.Config, &conf); err != nil {
-			return i, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to unmarshal credentials config: %s", err))
+			return i, errors.WithStack(herodot.ErrInternalServerError().WithReasonf("Unable to unmarshal credentials config: %s", err))
 		}
 
 		conf.Disabled = false
 		if creds.Config, err = json.Marshal(conf); err != nil {
-			return i, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to marshal credentials config: %s", err))
+			return i, errors.WithStack(herodot.ErrInternalServerError().WithReasonf("Unable to marshal credentials config: %s", err))
 		}
 		i.SetCredentials(identity.CredentialsTypeCodeAuth, *creds)
 		// Since we added the method, it also means that we have authenticated it
+		if err = s.deps.SessionManager().SessionAddAuthenticationMethods(ctx, ctxUpdate.Session.ID, session.AuthenticationMethod{
+			Method: s.ID(),
+			AAL:    identity.AuthenticatorAssuranceLevel2,
+		}); err != nil {
+			return nil, err
+		}
+	} else {
+		creds, err := s.codeCredentialsFromVerifiedAddresses(i)
+		if err != nil {
+			return i, err
+		}
+		i.SetCredentials(identity.CredentialsTypeCodeAuth, creds)
 		if err = s.deps.SessionManager().SessionAddAuthenticationMethods(ctx, ctxUpdate.Session.ID, session.AuthenticationMethod{
 			Method: s.ID(),
 			AAL:    identity.AuthenticatorAssuranceLevel2,
@@ -266,6 +279,57 @@ func (s *Strategy) continueSettingsFlowEnable(ctx context.Context, ctxUpdate *se
 	return i, nil
 }
 
+func (s *Strategy) codeCredentialsFromVerifiedAddresses(i *identity.Identity) (identity.Credentials, error) {
+	conf := identity.CredentialsCode{Disabled: false}
+	seen := make(map[string]struct{})
+	for _, address := range i.VerifiableAddresses {
+		if !address.Verified || address.Value == "" || address.Via == "" {
+			continue
+		}
+
+		channel, err := identity.NewCodeChannel(string(address.Via))
+		if err != nil {
+			continue
+		}
+
+		value, err := x.NormalizeIdentifier(address.Value, string(channel))
+		if err != nil {
+			continue
+		}
+
+		key := string(channel) + "\x00" + value
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		conf.Addresses = append(conf.Addresses, identity.CredentialsCodeAddress{
+			Channel: channel,
+			Address: value,
+		})
+	}
+
+	if len(conf.Addresses) == 0 {
+		return identity.Credentials{}, errors.WithStack(herodot.ErrBadRequest().WithReason("Cannot enable code credentials because this identity has no verified email or SMS address."))
+	}
+
+	raw, err := json.Marshal(conf)
+	if err != nil {
+		return identity.Credentials{}, errors.WithStack(herodot.ErrInternalServerError().WithReasonf("Unable to marshal credentials config: %s", err))
+	}
+
+	identifiers := make([]string, 0, len(conf.Addresses))
+	for _, address := range conf.Addresses {
+		identifiers = append(identifiers, address.Address)
+	}
+
+	return identity.Credentials{
+		Type:        identity.CredentialsTypeCodeAuth,
+		Identifiers: identifiers,
+		Config:      raw,
+		Version:     1,
+	}, nil
+}
+
 func (s *Strategy) continueSettingsFlowDisable(ctx context.Context, ctxUpdate *settings.UpdateContext, p updateSettingsFlowWithCodeMethod) (*identity.Identity, error) {
 	s.deps.Logger().WithField("code_disable", p.CodeDisable).WithField("identity", ctxUpdate.Session.Identity.ID.String()).Info("disabling code credentials for identity")
 	ctxUpdate.Flow.UI.Nodes.Upsert(node.NewInputField(node.CodeEnable, "true", node.CodeGroup, node.InputAttributeTypeSubmit, node.WithRequiredInputAttribute).WithMetaLabel(text.NewInfoSelfServiceSettingsEnableMethod()))
@@ -283,12 +347,12 @@ func (s *Strategy) continueSettingsFlowDisable(ctx context.Context, ctxUpdate *s
 
 		var conf identity.CredentialsCode
 		if err = json.Unmarshal(creds.Config, &conf); err != nil {
-			return i, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to unmarshal credentials config: %s", err))
+			return i, errors.WithStack(herodot.ErrInternalServerError().WithReasonf("Unable to unmarshal credentials config: %s", err))
 		}
 
 		conf.Disabled = true
 		if creds.Config, err = json.Marshal(conf); err != nil {
-			return i, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to marshal credentials config: %s", err))
+			return i, errors.WithStack(herodot.ErrInternalServerError().WithReasonf("Unable to marshal credentials config: %s", err))
 		}
 		i.SetCredentials(identity.CredentialsTypeCodeAuth, *creds)
 
@@ -347,7 +411,7 @@ func (s *Strategy) identityHasCode(ctx context.Context, id *identity.Identity) (
 func (s *Strategy) handleSettingsError(w http.ResponseWriter, r *http.Request, ctxUpdate *settings.UpdateContext, p updateSettingsFlowWithCodeMethod, err error) error {
 	// Do not pause flow if the flow type is an API flow as we can't save cookies in those flows.
 	if e := new(settings.FlowNeedsReAuth); errors.As(err, &e) && ctxUpdate.Flow != nil && ctxUpdate.Flow.Type == flow.TypeBrowser {
-		if err := s.deps.ContinuityManager().Pause(r.Context(), w, r, settings.ContinuityKey(s.SettingsStrategyID()), settings.ContinuityOptions(p, ctxUpdate.GetSessionIdentity())...); err != nil {
+		if _, err := s.deps.ContinuityManager().Pause(r.Context(), w, r, settings.ContinuityKey(s.SettingsStrategyID()), continuity.NewCookieReferenceStore(s.deps.ContinuityCookieManager(r.Context())), settings.ContinuityOptions(p, ctxUpdate.GetSessionIdentity())...); err != nil {
 			return err
 		}
 	}

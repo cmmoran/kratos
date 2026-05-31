@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -125,6 +126,21 @@ func (m *Device) DeviceTrustedFor(i identity.CredentialsType) bool {
 	return false
 }
 
+func FilterTrustedDevicesByExpiration(devices []Device, deviceTrustDuration time.Duration) []Device {
+	now := time.Now().UTC()
+	return slices.DeleteFunc(devices, func(device Device) bool {
+		if device.Trusted && len(device.AMR) > 0 {
+			for _, amr := range device.AMR {
+				if now.After(amr.CompletedAt.Add(deviceTrustDuration)) {
+					return true
+				}
+			}
+			return false
+		}
+		return true
+	})
+}
+
 // A Session
 //
 // swagger:model session
@@ -184,6 +200,10 @@ type Session struct {
 
 	// Devices has history of all endpoints where the session was used
 	Devices []Device `json:"devices" faker:"-" has_many:"session_devices" fk_id:"session_id"`
+
+	// CurrentDevice is the device derived from the current request. It is not
+	// persisted and is used only for request-scoped device trust evaluation.
+	CurrentDevice *Device `json:"-" faker:"-" db:"-"`
 
 	// TrustedDevices are devices that have been explicitly trusted via `trust_device` checkbox of aal2 login strategies
 	TrustedDevices []Device `json:"-" faker:"-" db:"-"`
@@ -424,17 +444,22 @@ func NewInactiveSession() *Session {
 
 func (s *Session) SetSessionDeviceInformation(r *http.Request) *Device {
 	device := CurrentDeviceForRequest(r)
+	if device == nil {
+		return nil
+	}
 	(*device).SessionID = s.ID
 	(*device).IdentityID = new(s.IdentityID)
 	for i := range s.Devices {
 		dev := &(s.Devices[i])
 		if dev.SameDevice(device) {
+			s.CurrentDevice = dev
 			return dev
 		}
 	}
 	s.Devices = append(s.Devices, *device)
+	s.CurrentDevice = &s.Devices[len(s.Devices)-1]
 
-	return device
+	return s.CurrentDevice
 }
 
 func (s Session) Declassified() *Session {

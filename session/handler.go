@@ -721,7 +721,7 @@ type listIdentityDevicesResponse struct {
 func (h *Handler) listIdentityDevices(w http.ResponseWriter, r *http.Request) {
 	iID, err := uuid.FromString(r.PathValue("id"))
 	if err != nil {
-		h.r.Writer().WriteError(w, r, errors.WithStack(herodot.ErrBadRequest.WithError(err.Error()).WithDebug("could not parse UUID")))
+		h.r.Writer().WriteError(w, r, errors.WithStack(herodot.ErrBadRequest().WithError(err.Error()).WithDebug("could not parse UUID")))
 		return
 	}
 
@@ -1103,12 +1103,12 @@ type patchIdentityDevices struct {
 func (h *Handler) patchIdentityDevices(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.FromString(r.PathValue("id"))
 	if err != nil {
-		h.r.Writer().WriteError(w, r, errors.WithStack(herodot.ErrBadRequest.WithError(err.Error()).WithDebug("could not parse UUID")))
+		h.r.Writer().WriteError(w, r, errors.WithStack(herodot.ErrBadRequest().WithError(err.Error()).WithDebug("could not parse UUID")))
 		return
 	}
 	deviceID, err := uuid.FromString(r.PathValue("device_id"))
 	if err != nil {
-		h.r.Writer().WriteError(w, r, errors.WithStack(herodot.ErrBadRequest.WithError(err.Error()).WithDebug("could not parse UUID")))
+		h.r.Writer().WriteError(w, r, errors.WithStack(herodot.ErrBadRequest().WithError(err.Error()).WithDebug("could not parse UUID")))
 		return
 	}
 

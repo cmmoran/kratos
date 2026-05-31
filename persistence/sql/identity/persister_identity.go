@@ -6,6 +6,7 @@ package identity
 import (
 	"cmp"
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"fmt"
 	"maps"

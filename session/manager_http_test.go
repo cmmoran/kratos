@@ -1066,3 +1066,95 @@ func TestDoesSessionSatisfy(t *testing.T) {
 		})
 	}
 }
+
+func TestDoesSessionSatisfyDeviceTrustBased(t *testing.T) {
+	t.Parallel()
+
+	ctx := contextx.WithConfigValues(t.Context(), map[string]any{
+		config.ViperKeySelfServiceStrategyConfig + ".code.mfa_enabled":          true,
+		config.ViperKeySelfServiceStrategyConfig + ".code.passwordless_enabled": false,
+		config.ViperKeySecurityTrustDeviceDuration:                              "1h",
+	})
+	_, reg := pkg.NewFastRegistryWithMocks(t,
+		configx.WithValues(testhelpers.DefaultIdentitySchemaConfig("file://./stub/identity.schema.json")),
+	)
+
+	id := identity.NewIdentity("default")
+	email := testhelpers.RandomEmail()
+	id.SetCredentials(identity.CredentialsTypePassword, identity.Credentials{
+		Type:        identity.CredentialsTypePassword,
+		Identifiers: []string{email},
+		Config:      []byte(`{"hashed_password": "$argon2id$v=19$m=32,t=2,p=4$cm94YnRVOW5jZzFzcVE4bQ$MNzk5BtR2vUhrp6qQEjRNw"}`),
+	})
+	id.SetCredentials(identity.CredentialsTypeCodeAuth, identity.Credentials{
+		Type:        identity.CredentialsTypeCodeAuth,
+		Identifiers: []string{email},
+		Config:      []byte(`{"addresses":[{"channel":"email","address":"` + email + `"}]}`),
+	})
+	require.NoError(t, reg.IdentityManager().Create(ctx, id, identity.ManagerAllowWriteProtectedTraits))
+
+	seedTrustedDevice := func(fingerprint string, completedAt time.Time) {
+		trusted := session.NewInactiveSession()
+		trusted.IdentityID = id.ID
+		trusted.Identity = id
+		trusted.NID = id.NID
+		trusted.Active = false
+		trusted.Devices = []session.Device{{
+			ID:          x.NewUUID(),
+			NID:         id.NID,
+			IdentityID:  &id.ID,
+			Trusted:     true,
+			Fingerprint: &fingerprint,
+			AMR: session.AuthenticationMethods{{
+				Method:      identity.CredentialsTypeCodeAuth,
+				AAL:         identity.AuthenticatorAssuranceLevel2,
+				CompletedAt: completedAt,
+			}},
+		}}
+		require.NoError(t, reg.SessionPersister().UpsertSession(ctx, trusted))
+	}
+	newPasswordSession := func(fingerprint *string) *session.Session {
+		req := testhelpers.NewTestHTTPRequest(t, "GET", "/sessions/whoami", nil).WithContext(ctx)
+		if fingerprint != nil {
+			req.Header.Set("X-Session-Entropy", *fingerprint)
+		}
+		s := session.NewInactiveSession()
+		s.CompletedLoginFor(identity.CredentialsTypePassword, identity.AuthenticatorAssuranceLevel1)
+		require.NoError(t, reg.SessionManager().ActivateSession(req, s, id, time.Now().UTC()))
+		return s
+	}
+
+	t.Run("same unexpired fingerprint satisfies device trust only", func(t *testing.T) {
+		trustedFingerprint := "trusted-fingerprint-same"
+		seedTrustedDevice(trustedFingerprint, time.Now().Add(-time.Minute))
+		s := newPasswordSession(&trustedFingerprint)
+
+		require.NoError(t, reg.SessionManager().DoesSessionSatisfy(ctx, s, config.DeviceTrustBasedAAL))
+		require.ErrorAs(t, reg.SessionManager().DoesSessionSatisfy(ctx, s, config.HighestAvailableAAL), new(*session.ErrAALNotSatisfied))
+	})
+
+	t.Run("missing fingerprint does not satisfy device trust", func(t *testing.T) {
+		trustedFingerprint := "trusted-fingerprint-missing"
+		seedTrustedDevice(trustedFingerprint, time.Now().Add(-time.Minute))
+		s := newPasswordSession(nil)
+
+		require.ErrorAs(t, reg.SessionManager().DoesSessionSatisfy(ctx, s, config.DeviceTrustBasedAAL), new(*session.ErrAALNotSatisfied))
+	})
+
+	t.Run("different fingerprint does not satisfy device trust", func(t *testing.T) {
+		trustedFingerprint := "trusted-fingerprint-different"
+		otherFingerprint := "other-fingerprint"
+		seedTrustedDevice(trustedFingerprint, time.Now().Add(-time.Minute))
+		s := newPasswordSession(&otherFingerprint)
+
+		require.ErrorAs(t, reg.SessionManager().DoesSessionSatisfy(ctx, s, config.DeviceTrustBasedAAL), new(*session.ErrAALNotSatisfied))
+	})
+
+	t.Run("expired trust does not satisfy device trust", func(t *testing.T) {
+		trustedFingerprint := "trusted-fingerprint-expired"
+		seedTrustedDevice(trustedFingerprint, time.Now().Add(-2*time.Hour))
+		s := newPasswordSession(&trustedFingerprint)
+
+		require.ErrorAs(t, reg.SessionManager().DoesSessionSatisfy(ctx, s, config.DeviceTrustBasedAAL), new(*session.ErrAALNotSatisfied))
+	})
+}

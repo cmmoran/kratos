@@ -68,6 +68,7 @@ type (
 		x.TransactionPersistenceProvider
 
 		config.Provider
+		x.CookieProvider
 
 		session.HandlerProvider
 		session.ManagementProvider

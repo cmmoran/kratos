@@ -5,7 +5,6 @@ package devices
 
 import (
 	"context"
-	"slices"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -86,18 +85,5 @@ func (p *DevicePersister) ListTrustedDevicesByIdentityWithExpiration(ctx context
 		return nil, err
 	}
 
-	now := time.Now().UTC()
-	_ = slices.DeleteFunc(devices, func(device session.Device) bool {
-		if device.Trusted && len(device.AMR) > 0 {
-			for _, amr := range device.AMR {
-				if now.After(amr.CompletedAt.Add(deviceTrustDuration)) {
-					return true
-				}
-			}
-			return false
-		}
-		return true
-	})
-
-	return devices, nil
+	return session.FilterTrustedDevicesByExpiration(devices, deviceTrustDuration), nil
 }

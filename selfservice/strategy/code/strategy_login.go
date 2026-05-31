@@ -263,7 +263,7 @@ func (s *Strategy) Login(w http.ResponseWriter, r *http.Request, f *login.Flow, 
 				(*currentDevice).AMR = append((*currentDevice).AMR, method)
 				s.deps.Logger().WithRequest(r).WithField("current_device", *currentDevice).WithField("devices", sess.Devices).WithField("amr", method).Debug("setting device to trusted")
 				if err = s.deps.SessionPersister().UpsertDevice(ctx, currentDevice); err != nil {
-					return i, errors.WithStack(herodot.ErrInternalServerError.WithReason("Could not update device").WithDebug(err.Error()))
+					return i, errors.WithStack(herodot.ErrInternalServerError().WithReason("Could not update device").WithDebug(err.Error()))
 				}
 			}
 		}

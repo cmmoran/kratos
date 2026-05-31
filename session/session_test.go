@@ -89,6 +89,44 @@ func TestAdminSessionMarshal(t *testing.T) {
 	})
 }
 
+func TestFilterTrustedDevicesByExpiration(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	unexpired := session.Device{
+		ID:      x.NewUUID(),
+		Trusted: true,
+		AMR: session.AuthenticationMethods{{
+			Method:      identity.CredentialsTypeCodeAuth,
+			AAL:         identity.AuthenticatorAssuranceLevel2,
+			CompletedAt: now.Add(-time.Minute),
+		}},
+	}
+	expired := session.Device{
+		ID:      x.NewUUID(),
+		Trusted: true,
+		AMR: session.AuthenticationMethods{{
+			Method:      identity.CredentialsTypeCodeAuth,
+			AAL:         identity.AuthenticatorAssuranceLevel2,
+			CompletedAt: now.Add(-2 * time.Hour),
+		}},
+	}
+	untrusted := session.Device{
+		ID:      x.NewUUID(),
+		Trusted: false,
+		AMR: session.AuthenticationMethods{{
+			Method:      identity.CredentialsTypeCodeAuth,
+			AAL:         identity.AuthenticatorAssuranceLevel2,
+			CompletedAt: now,
+		}},
+	}
+	withoutAMR := session.Device{ID: x.NewUUID(), Trusted: true}
+
+	filtered := session.FilterTrustedDevicesByExpiration([]session.Device{unexpired, expired, untrusted, withoutAMR}, time.Hour)
+	require.Len(t, filtered, 1)
+	assert.Equal(t, unexpired.ID, filtered[0].ID)
+}
+
 func TestSession(t *testing.T) {
 	_, reg := pkg.NewFastRegistryWithMocks(t,
 		configx.WithValues(testhelpers.DefaultIdentitySchemaConfig("file://./stub/identity.schema.json")),
@@ -467,7 +505,7 @@ func TestSession(t *testing.T) {
 				for _, m := range tc.methods {
 					s.CompletedLoginFor(m.Method, m.AAL)
 				}
-				s.SetAuthenticatorAssuranceLevel()
+				s.SetAuthenticatorAssuranceLevel("")
 				assert.Equal(t, tc.expected, s.AuthenticatorAssuranceLevel)
 			})
 		}

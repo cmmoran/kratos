@@ -275,6 +275,8 @@ func (s *ManagerHTTP) FetchFromRequest(ctx context.Context, r *http.Request) (_ 
 		return nil, errors.WithStack(NewErrNoActiveSessionFound())
 	}
 
+	se.SetSessionDeviceInformation(r.WithContext(ctx))
+
 	return se, nil
 }
 
@@ -357,6 +359,9 @@ func (s *ManagerHTTP) DoesSessionSatisfy(ctx context.Context, sess *Session, req
 
 		if requestedAAL == config.DeviceTrustBasedAAL {
 			currentDevice := CurrentDeviceForContext(ctx)
+			if currentDevice == nil {
+				currentDevice = sess.CurrentDevice
+			}
 			s.adjustSessionAAL(ctx, sess, currentDevice, sess.Identity)
 			sess.SetAuthenticatorAssuranceLevel(requestedAAL)
 		}
@@ -504,6 +509,9 @@ func (s *ManagerHTTP) ActivateSession(r *http.Request, session *Session, i *iden
 
 func (s *ManagerHTTP) adjustSessionAAL(ctx context.Context, sess *Session, currentDevice *Device, i *identity.Identity) {
 	var err error
+	if currentDevice == nil || i == nil {
+		return
+	}
 	iaal := identity.AuthenticatorAssuranceLevel1
 	if iaalRaw, ok := i.InternalAvailableAAL.ToAAL(); ok {
 		iaal = iaalRaw
